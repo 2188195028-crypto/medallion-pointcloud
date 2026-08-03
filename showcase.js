@@ -67,6 +67,7 @@ const restartBtn = document.getElementById("restart");
 const loadingEl = document.getElementById("loading");
 const errorEl = document.getElementById("error");
 const errorMsg = document.getElementById("error-msg");
+const hintEl = document.getElementById("hint");
 
 const els = {
   category: document.getElementById("category"),
@@ -261,32 +262,30 @@ const uniforms = {
   uReduced: { value: REDUCED ? 1 : 0 },
 };
 
-// ---------- 交互控制 ----------
-// 鼠标/触摸:模型始终自动旋转;按住拖动(上下)连续控制粒子升起/消散,
-// 单击切换状态(散开↔成形)。交互结束后:成形→稳定 4s→自动消散→恢复自动循环。
+// ---------- 交互控制(纯交互模式) ----------
+// 模型始终自动旋转;粒子默认散开在地面。
+// 按住鼠标/触摸 = 粒子升起聚合;松开 = 粒子消散落地;按住时上下拖动微调相位。
 const interact = {
   engaged: false, // 交互接管中
-  dragging: false, // 拖动中
+  dragging: false, // 按住中
   easing: false, // 向目标相位缓动
-  stage: "idle", // idle | stable(成形稳定) | dissolving
   startX: 0,
   startY: 0,
   moved: false,
-  phase: 0, // 当前相位
+  phase: 0, // 当前相位(0=散开 1=成形)
   targetPhase: 0, // 缓动目标
-  stableUntil: 0, // 稳定结束时间
 };
 const IS_PORTRAIT = () => window.innerHeight > window.innerWidth;
 
 function onPointerDown(e) {
-  if (REDUCED) return; // 减少动态模式：保持稳定展示，不接管交互
+  if (REDUCED) return; // 减少动态模式：保持成形稳定展示，不接管交互
   interact.engaged = true;
   interact.dragging = true;
   interact.moved = false;
-  interact.easing = false;
-  interact.stage = "idle";
+  interact.easing = true;
   interact.startX = e.clientX;
   interact.startY = e.clientY;
+  interact.targetPhase = 1; // 按下 = 升起
 }
 function onPointerMove(e) {
   if (!interact.dragging) return;
@@ -294,47 +293,38 @@ function onPointerMove(e) {
   const dy = interact.startY - e.clientY;
   if (Math.abs(dx) > 10 || Math.abs(dy) > 10) interact.moved = true;
   if (interact.moved) {
-    // 纵向拖动 → 相位:向上拖升起(聚合),向下拖消散
-    interact.phase = Math.min(1, Math.max(0, dy / (window.innerHeight * 0.4)));
+    // 按住时上下拖动:在升起基准上微调相位(向上再加一点,向下回落一些)
+    interact.phase = Math.min(1, Math.max(0, 1 + dy / (window.innerHeight * 0.4)));
+    interact.easing = false;
   }
 }
 function onPointerUp() {
   if (!interact.dragging) return;
   interact.dragging = false;
-  // 拖动结束或点击:缓动到最近的稳定端(0=散开,1=成形)
-  interact.targetPhase = interact.phase >= 0.5 ? 1 : 0;
+  interact.targetPhase = 0; // 松开 = 消散
   interact.easing = true;
 }
 canvas.addEventListener("pointerdown", onPointerDown);
 window.addEventListener("pointermove", onPointerMove);
 window.addEventListener("pointerup", onPointerUp);
 
-// 每帧推进交互状态机
+// 每帧推进交互状态机(按住升起 / 松开消散的缓动)
 function updateInteract(dt) {
   if (!interact.engaged) return;
-  if (interact.dragging) return; // 相位由指针实时控制
+  if (interact.dragging && !interact.easing) return; // 拖动中由指针控制
   if (interact.easing) {
     const diff = interact.targetPhase - interact.phase;
-    const step = dt * 1.8; // 约 0.55s 完成过渡
+    const step = dt * 1.6; // 约 0.6s 完成过渡
     if (Math.abs(diff) <= step) {
       interact.phase = interact.targetPhase;
       interact.easing = false;
-      if (interact.targetPhase >= 1) {
-        // 成形:稳定展示 4 秒后自动消散
-        interact.stage = "stable";
-        interact.stableUntil = performance.now() + 4000;
-      } else {
-        // 回到散开:恢复自动循环
+      if (interact.targetPhase <= 0) {
+        // 消散完成 → 回到待机(粒子散开,模型继续旋转)
         interact.engaged = false;
-        clock = 0;
       }
     } else {
       interact.phase += Math.sign(diff) * step;
     }
-  } else if (interact.stage === "stable" && performance.now() > interact.stableUntil) {
-    interact.stage = "dissolving";
-    interact.targetPhase = 0;
-    interact.easing = true;
   }
 }
 
@@ -814,6 +804,9 @@ function buildPoints(data, stats) {
   applyLayout();
   loadingEl.style.opacity = "0";
   setTimeout(() => { loadingEl.style.display = "none"; }, 600);
+  textElapsed = 0; // 开始文字淡入与打字
+  setTimeout(() => hintEl.classList.add("show"), 1000); // 操作提示
+  setTimeout(() => hintEl.classList.remove("show"), 6500);
   reportDiagnostics();
   setTimeout(reportDiagnostics, 6000); // 6 秒后补充含帧率的完整诊断
   if (SHOT) setTimeout(fireShotOnce, 1500); // ?t= 冻结模式下渲染稳定后上报
@@ -873,57 +866,50 @@ const smooth = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-// 文字元素入场/退场
+// 文字元素(加载完成后依次淡入,常驻不退场)
 const featureItems = Array.from(featuresEl.children);
+let textElapsed = -1; // <0 表示尚未开始;加载完成后从 0 计时
 
-function updateText(t) {
-  const style = (el, inA, inB, outA, outB) => {
+function updateText(dt) {
+  if (textElapsed < 0) return;
+  textElapsed += dt;
+  const e = textElapsed;
+
+  const fadeIn = (el, delay) => {
     if (!el) return;
-    const pIn = smooth(inA, inB, t);
-    const pOut = 1 - smooth(outA, outB, t); // 仍在展示的比例
-    const p = pIn * pOut;
-    // 入场从下方 18px 回位到 0；退场从 0 下移到 16px（规范：下移约 14-18px）
-    const dy = (1 - pIn) * 18 + (1 - pOut) * 16;
+    const p = smooth(0.25 + delay, 0.95 + delay, e); // 入场从下方 18px 回位
     el.style.opacity = p.toFixed(3);
-    el.style.transform = `translateY(${dy.toFixed(2)}px)`;
+    el.style.transform = `translateY(${((1 - p) * 18).toFixed(2)}px)`;
   };
-  style(els.category, TL.textInStart, TL.textInEnd, TL.textOutStart, TL.textOutEnd);
-  style(els.title, TL.textInStart + 0.08, TL.textInEnd + 0.08, TL.textOutStart, TL.textOutEnd);
-  style(els.alias, TL.textInStart + 0.15, TL.textInEnd + 0.15, TL.textOutStart, TL.textOutEnd);
-  style(els.intro, TL.textInStart + 0.24, TL.textInEnd + 0.24, TL.textOutStart, TL.textOutEnd);
-  style(els.introSub, TL.textInStart + 0.32, TL.textInEnd + 0.32, TL.textOutStart, TL.textOutEnd);
-  style(bodyWrap, TL.textInStart + 0.3, TL.textInEnd + 0.3, TL.textOutStart, TL.textOutEnd);
-  // 修复要点：#palette/#tags 的 CSS 初始 opacity 为 0，必须淡入 ul 本身
-  //（旧代码误设到外层 .palette-wrap，导致 ul 永远不可见）
-  style(paletteEl, TL.paletteIn, TL.paletteIn + 0.55, TL.textOutStart, TL.textOutEnd);
-  style(tagsEl, TL.paletteIn, TL.paletteIn + 0.55, TL.textOutStart, TL.textOutEnd);
-  // 色点与工艺标签依次显示（细边框小矩形，非胶囊）
-  Array.from(paletteEl.children).forEach((li, i) =>
-    style(li, TL.paletteIn + 0.12 + i * 0.08, TL.paletteIn + 0.6, TL.textOutStart, TL.textOutEnd)
-  );
-  Array.from(tagsEl.children).forEach((li, i) =>
-    style(li, TL.paletteIn + 0.15 + i * 0.08, TL.paletteIn + 0.65, TL.textOutStart, TL.textOutEnd)
-  );
-  featureItems.forEach((li, i) =>
-    style(li, TL.featureIn[i], TL.featureIn[i] + 0.45, TL.textOutStart, TL.textOutEnd)
-  );
+  fadeIn(els.category, 0);
+  fadeIn(els.title, 0.08);
+  fadeIn(els.alias, 0.15);
+  fadeIn(els.intro, 0.24);
+  fadeIn(els.introSub, 0.32);
+  fadeIn(bodyWrap, 0.4);
+  // #palette/#tags 的 ul 初始 opacity 为 0,必须淡入 ul 本身
+  fadeIn(paletteEl, 0.9);
+  fadeIn(tagsEl, 0.95);
+  Array.from(paletteEl.children).forEach((li, i) => fadeIn(li, 1.0 + i * 0.08));
+  Array.from(tagsEl.children).forEach((li, i) => fadeIn(li, 1.05 + i * 0.08));
+  featureItems.forEach((li, i) => fadeIn(li, 1.2 + i * 0.3));
 
-  // 打字机
+  // 打字机:加载完成后 0.6s 开始,常驻
   const len = config.bodyZh.length;
-  const typed = REDUCED ? len : Math.min(len, Math.max(0, Math.floor((t - TL.bodyTypeStart) * TL.typeRate)));
+  const typed = REDUCED ? len : Math.min(len, Math.max(0, Math.floor((e - 0.6) * TL.typeRate)));
   bodyEl.textContent = config.bodyZh.slice(0, typed);
-  cursorEl.style.opacity = (REDUCED || typed < len) && t < TL.textOutStart ? "1" : "0";
+  cursorEl.style.opacity = REDUCED || typed < len ? "1" : "0";
 }
 
-function updateProgress(t) {
-  const pct = Math.min(100, Math.max(0, (t / DURATION) * 100));
+// 进度条显示当前相位(按住升起进度)
+function updateProgress() {
+  const pct = Math.round(interact.phase * 100);
   progressFill.style.width = pct.toFixed(2) + "%";
-  progressBar.setAttribute("aria-valuenow", Math.round(pct).toString());
+  progressBar.setAttribute("aria-valuenow", pct.toString());
 }
 
 // ---------- 主循环 ----------
-let clock = 0; // 0..10 循环
-let rotTotal = 0; // 连续旋转相位（跨循环不重置，避免衔接瞬跳）
+let rotTotal = 0; // 连续旋转相位（不重置，避免衔接瞬跳）
 let phaseTotal = 0; // 连续浮动相位
 let last = performance.now();
 let fpsSum = 0, fpsN = 0;
@@ -934,61 +920,34 @@ function frame(now) {
 
   updateInteract(dt);
 
-  if (FIX_T !== null) {
-    clock = FIX_T; // 调试冻结：截图验证用
-    rotTotal = FIX_T * STAGE.rotationSpeed;
-    phaseTotal = FIX_T;
-  } else if (!REDUCED && !interact.engaged) {
-    clock += dt;
-    if (clock >= DURATION) clock -= DURATION;
-    rotTotal += dt * STAGE.rotationSpeed;
-    phaseTotal += dt;
-  } else if (!REDUCED) {
-    // 交互中：时间线暂停，但模型保持自动旋转与浮动
-    rotTotal += dt * STAGE.rotationSpeed;
-    phaseTotal += dt;
-  } else {
-    clock = 5.0; // 减少动态：稳定展示
-    rotTotal = 0.35;
-    phaseTotal = 0;
-  }
-  const t = clock;
-  uniforms.uTime.value = t;
+  // 纯交互模式:无自动时间线;模型始终自动旋转 + 浮动
+  rotTotal += dt * STAGE.rotationSpeed;
+  phaseTotal += dt;
+  uniforms.uTime.value = phaseTotal; // 粒子闪烁/漂移动画继续
 
-  // 相位（升起/消散）：自动时间线映射，或鼠标/触摸交互输入
-  if (interact.engaged) {
-    uniforms.uPhase.value = interact.phase;
+  if (FIX_T !== null) {
+    // 调试冻结(?t=5.2):phase 按原时间线映射,便于截图验证
+    const tt = FIX_T;
+    uniforms.uPhase.value = smooth(0.08, 3.73, tt) * (1 - smooth(7.4, 9.9, tt));
+    uniforms.uPhaseFade.value = 1 - smooth(8.8, 9.75, tt);
+  } else if (REDUCED) {
+    // 减少动态:成形稳定展示
+    uniforms.uPhase.value = 1;
     uniforms.uPhaseFade.value = 1;
   } else {
-    uniforms.uPhase.value = smooth(0.08, 3.73, t) * (1 - smooth(7.4, 9.9, t));
-    uniforms.uPhaseFade.value = 1 - smooth(8.8, 9.75, t);
+    // 粒子相位完全由鼠标/触摸控制(0=散开 1=成形)
+    uniforms.uPhase.value = interact.phase;
+    uniforms.uPhaseFade.value = 1;
   }
 
-  // 模型：慢速旋转（连续相位，交互时也不停）+ 极轻微浮动。
-  // 交互时固定在展示位；自动模式保留入场滑入/退场滑出（9.4s 后不可见回位）。
+  // 模型:始终自动旋转 + 极轻微浮动,固定在展示位
   group.rotation.y = rotTotal;
   const baseY = IS_PORTRAIT() ? STAGE.portraitCenterY : 0; // 竖屏模型下移
-  if (!REDUCED) {
-    group.position.y = baseY + Math.sin(phaseTotal * 0.6) * STAGE.floatAmp;
-    if (!interact.engaged) {
-      const fIn = smooth(0.08, 2.9, t);
-      const fOut = smooth(7.6, 9.4, t);
-      const ret = smooth(9.4, 9.98, t); // 退场后不可见回位
-      group.position.x =
-        baseX +
-        STAGE.enterSlide * (1 - fIn) -
-        STAGE.exitSlide * fOut +
-        (STAGE.enterSlide + STAGE.exitSlide) * ret;
-    } else {
-      group.position.x = baseX;
-    }
-  } else {
-    group.position.y = 0;
-    group.position.x = baseX;
-  }
+  group.position.y = baseY + Math.sin(phaseTotal * 0.6) * STAGE.floatAmp;
+  group.position.x = baseX;
 
-  updateText(t);
-  if (!interact.engaged) updateProgress(t);
+  updateText(dt);
+  updateProgress();
 
   composer.render();
   fpsSum += dt; fpsN++;
@@ -996,12 +955,12 @@ function frame(now) {
 }
 
 restartBtn.addEventListener("click", () => {
-  clock = 0; // 时间归零；旋转/浮动相位保持连续，衔接无瞬跳
-  // 取消交互接管，恢复自动循环
+  // 重置:粒子回到散开待机(模型继续旋转)
   interact.engaged = false;
   interact.dragging = false;
   interact.easing = false;
-  interact.stage = "idle";
+  interact.phase = 0;
+  interact.targetPhase = 0;
 });
 document.getElementById("reload").addEventListener("click", () => location.reload());
 
