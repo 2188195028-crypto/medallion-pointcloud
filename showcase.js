@@ -267,7 +267,7 @@ const flow = {
   phase: 0, // 0=散开 1=成形
   target: 1, // 进入默认升起
   easing: true,
-  speed: 0.9, // 当前缓动速度(入场动画约 1.1s)
+  speed: 0.45, // 当前缓动速度(入场动画约 2.2s)
 };
 const IS_PORTRAIT = () => window.innerHeight > window.innerWidth;
 
@@ -298,8 +298,8 @@ let gestureTimer = null;
 function handleGesture(d) {
   gestureAccum += d;
   if (Math.abs(gestureAccum) >= GESTURE_THRESHOLD) {
-    if (gestureAccum > 0) setPhase(0, 3.0); // 下滑/前翻 → 消散
-    else setPhase(1, 2.2); // 上滑/回翻 → 升起
+    if (gestureAccum > 0) setPhase(0, 0.5); // 下滑/前翻 → 消散
+    else setPhase(1, 0.45); // 上滑/回翻 → 升起
     gestureAccum = 0;
   }
   clearTimeout(gestureTimer);
@@ -322,8 +322,8 @@ window.addEventListener("touchmove", (e) => {
 window.addEventListener("touchend", () => {
   if (touchStartY === null) return;
   if (Math.abs(touchAccum) >= 60) {
-    if (touchAccum > 0) setPhase(0, 3.0); // 手指上滑 → 消散
-    else setPhase(1, 2.2); // 手指下滑 → 升起
+    if (touchAccum > 0) setPhase(0, 0.5); // 手指上滑 → 消散
+    else setPhase(1, 0.45); // 手指下滑 → 升起
   }
   touchStartY = null;
 });
@@ -331,12 +331,12 @@ window.addEventListener("touchend", () => {
 // 页面切走/关闭 → 消散;回到页面 → 慢速重新升起(入场动画)
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
-    setPhase(0, 2.5);
+    setPhase(0, 0.5);
   } else {
-    setPhase(1, 0.9);
+    setPhase(1, 0.45);
   }
 });
-window.addEventListener("beforeunload", () => setPhase(0, 2.5));
+window.addEventListener("beforeunload", () => setPhase(0, 0.5));
 
 function makeMaterial() {
   return new THREE.ShaderMaterial({
@@ -958,7 +958,7 @@ function frame(now) {
 
 restartBtn.addEventListener("click", () => {
   // 重新升起(慢速入场动画;模型继续旋转)
-  setPhase(1, 0.9);
+  setPhase(1, 0.45);
 });
 document.getElementById("reload").addEventListener("click", () => location.reload());
 
