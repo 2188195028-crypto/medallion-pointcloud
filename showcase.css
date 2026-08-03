@@ -288,7 +288,7 @@ body {
   z-index: 3;
   display: flex;
   align-items: center;
-  gap: calc(20px * var(--layout-scale));
+  justify-content: space-between; /* 编号在左、重启在右 */
 }
 
 #counter {
@@ -299,24 +299,7 @@ body {
   white-space: nowrap;
 }
 
-/* 细进度线：金色渐变到青绿色 */
-#progress {
-  flex: 1;
-  height: 1px;
-  background: rgba(239, 230, 207, 0.14);
-  position: relative;
-  overflow: visible;
-}
-
-#progress-fill {
-  height: 2px;
-  width: 0%;
-  background: linear-gradient(90deg, var(--gold), var(--accent));
-  box-shadow: 0 0 6px rgba(220, 168, 82, 0.35);
-  position: absolute;
-  top: -0.5px;
-  left: 0;
-}
+/* （底部计时进度条已移除：仅保留编号与重启按钮，左右分布） */
 
 /* 重启按钮：细边框，小圆角，低调 */
 #restart {

@@ -61,8 +61,6 @@ const cursorEl = document.getElementById("cursor");
 const featuresEl = document.getElementById("features");
 const paletteEl = document.getElementById("palette");
 const tagsEl = document.getElementById("tags");
-const progressFill = document.getElementById("progress-fill");
-const progressBar = document.getElementById("progress");
 const restartBtn = document.getElementById("restart");
 const loadingEl = document.getElementById("loading");
 const errorEl = document.getElementById("error");
@@ -901,12 +899,7 @@ function updateText(dt) {
   cursorEl.style.opacity = REDUCED || typed < len ? "1" : "0";
 }
 
-// 进度条显示当前相位(按住升起进度)
-function updateProgress() {
-  const pct = Math.round(interact.phase * 100);
-  progressFill.style.width = pct.toFixed(2) + "%";
-  progressBar.setAttribute("aria-valuenow", pct.toString());
-}
+// （底部计时进度条已按用户要求移除）
 
 // ---------- 主循环 ----------
 let rotTotal = 0; // 连续旋转相位（不重置，避免衔接瞬跳）
@@ -947,7 +940,6 @@ function frame(now) {
   group.position.x = baseX;
 
   updateText(dt);
-  updateProgress();
 
   composer.render();
   fpsSum += dt; fpsN++;

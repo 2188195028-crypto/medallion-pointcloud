@@ -52,13 +52,10 @@
     <!-- 操作提示(按住升起,松开消散) -->
     <p id="hint" aria-hidden="true">按住鼠标或触摸屏 · 升起点云,松开消散</p>
 
-    <!-- 底部界面 -->
+    <!-- 底部界面(去掉计时进度条,仅保留编号与重启) -->
     <footer id="bottom-bar">
       <span id="counter">01 / 01</span>
-      <div id="progress" role="progressbar" aria-label="展示进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div id="progress-fill"></div>
-      </div>
-      <button id="restart" type="button" aria-label="重新播放展示循环">重启</button>
+      <button id="restart" type="button" aria-label="粒子回到散开状态">重启</button>
     </footer>
 
     <!-- 加载状态 -->
