@@ -65,7 +65,6 @@ const restartBtn = document.getElementById("restart");
 const loadingEl = document.getElementById("loading");
 const errorEl = document.getElementById("error");
 const errorMsg = document.getElementById("error-msg");
-const hintEl = document.getElementById("hint");
 
 const els = {
   category: document.getElementById("category"),
@@ -260,71 +259,49 @@ const uniforms = {
   uReduced: { value: REDUCED ? 1 : 0 },
 };
 
-// ---------- 交互控制(纯交互模式) ----------
-// 模型始终自动旋转;粒子默认散开在地面。
-// 按住鼠标/触摸 = 粒子升起聚合;松开 = 粒子消散落地;按住时上下拖动微调相位。
-const interact = {
-  engaged: false, // 交互接管中
-  dragging: false, // 按住中
-  easing: false, // 向目标相位缓动
-  startX: 0,
-  startY: 0,
-  moved: false,
-  phase: 0, // 当前相位(0=散开 1=成形)
-  targetPhase: 0, // 缓动目标
+// ---------- 展示流程控制 ----------
+// 进入页面:粒子自动升起成形;翻页(滚动/切走)时粒子消散;
+// 其他时候模型保持旋转、成形展示不变。
+const flow = {
+  phase: 0, // 0=散开 1=成形
+  target: 1, // 进入默认升起
+  easing: true,
+  scattering: false, // 已触发消散(防重复触发)
 };
 const IS_PORTRAIT = () => window.innerHeight > window.innerWidth;
 
-function onPointerDown(e) {
-  if (REDUCED) return; // 减少动态模式：保持成形稳定展示，不接管交互
-  interact.engaged = true;
-  interact.dragging = true;
-  interact.moved = false;
-  interact.easing = true;
-  interact.startX = e.clientX;
-  interact.startY = e.clientY;
-  interact.targetPhase = 1; // 按下 = 升起
+function setPhase(target) {
+  flow.target = target;
+  flow.easing = true;
+  if (target <= 0) flow.scattering = true;
 }
-function onPointerMove(e) {
-  if (!interact.dragging) return;
-  const dx = e.clientX - interact.startX;
-  const dy = interact.startY - e.clientY;
-  if (Math.abs(dx) > 10 || Math.abs(dy) > 10) interact.moved = true;
-  if (interact.moved) {
-    // 按住时上下拖动:在升起基准上微调相位(向上再加一点,向下回落一些)
-    interact.phase = Math.min(1, Math.max(0, 1 + dy / (window.innerHeight * 0.4)));
-    interact.easing = false;
-  }
-}
-function onPointerUp() {
-  if (!interact.dragging) return;
-  interact.dragging = false;
-  interact.targetPhase = 0; // 松开 = 消散
-  interact.easing = true;
-}
-canvas.addEventListener("pointerdown", onPointerDown);
-window.addEventListener("pointermove", onPointerMove);
-window.addEventListener("pointerup", onPointerUp);
 
-// 每帧推进交互状态机(按住升起 / 松开消散的缓动)
-function updateInteract(dt) {
-  if (!interact.engaged) return;
-  if (interact.dragging && !interact.easing) return; // 拖动中由指针控制
-  if (interact.easing) {
-    const diff = interact.targetPhase - interact.phase;
-    const step = dt * 1.6; // 约 0.6s 完成过渡
-    if (Math.abs(diff) <= step) {
-      interact.phase = interact.targetPhase;
-      interact.easing = false;
-      if (interact.targetPhase <= 0) {
-        // 消散完成 → 回到待机(粒子散开,模型继续旋转)
-        interact.engaged = false;
-      }
-    } else {
-      interact.phase += Math.sign(diff) * step;
-    }
+// 每帧推进相位缓动(升起稍缓、消散稍快)
+function updateFlow(dt) {
+  if (!flow.easing) return;
+  const diff = flow.target - flow.phase;
+  const step = dt * (flow.target > flow.phase ? 1.1 : 1.5);
+  if (Math.abs(diff) <= step) {
+    flow.phase = flow.target;
+    flow.easing = false;
+  } else {
+    flow.phase += Math.sign(diff) * step;
   }
 }
+
+// 翻页 = 滚动 / 触摸滑动 / 页面切走 → 粒子消散;回到页面 → 重新升起
+window.addEventListener("wheel", () => { if (!flow.scattering) setPhase(0); }, { passive: true });
+window.addEventListener("touchmove", () => { if (!flow.scattering) setPhase(0); }, { passive: true });
+window.addEventListener("scroll", () => { if (!flow.scattering) setPhase(0); }, { passive: true });
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    setPhase(0);
+  } else {
+    flow.scattering = false;
+    setPhase(1);
+  }
+});
+window.addEventListener("beforeunload", () => setPhase(0));
 
 function makeMaterial() {
   return new THREE.ShaderMaterial({
@@ -803,8 +780,6 @@ function buildPoints(data, stats) {
   loadingEl.style.opacity = "0";
   setTimeout(() => { loadingEl.style.display = "none"; }, 600);
   textElapsed = 0; // 开始文字淡入与打字
-  setTimeout(() => hintEl.classList.add("show"), 1000); // 操作提示
-  setTimeout(() => hintEl.classList.remove("show"), 6500);
   reportDiagnostics();
   setTimeout(reportDiagnostics, 6000); // 6 秒后补充含帧率的完整诊断
   if (SHOT) setTimeout(fireShotOnce, 1500); // ?t= 冻结模式下渲染稳定后上报
@@ -911,9 +886,9 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
 
-  updateInteract(dt);
+  updateFlow(dt);
 
-  // 纯交互模式:无自动时间线;模型始终自动旋转 + 浮动
+  // 模型始终自动旋转 + 浮动;粒子相位由展示流程控制
   rotTotal += dt * STAGE.rotationSpeed;
   phaseTotal += dt;
   uniforms.uTime.value = phaseTotal; // 粒子闪烁/漂移动画继续
@@ -928,8 +903,8 @@ function frame(now) {
     uniforms.uPhase.value = 1;
     uniforms.uPhaseFade.value = 1;
   } else {
-    // 粒子相位完全由鼠标/触摸控制(0=散开 1=成形)
-    uniforms.uPhase.value = interact.phase;
+    // 进入自动升起;翻页(滚动/切走)时消散;平时成形旋转不变
+    uniforms.uPhase.value = flow.phase;
     uniforms.uPhaseFade.value = 1;
   }
 
@@ -947,12 +922,9 @@ function frame(now) {
 }
 
 restartBtn.addEventListener("click", () => {
-  // 重置:粒子回到散开待机(模型继续旋转)
-  interact.engaged = false;
-  interact.dragging = false;
-  interact.easing = false;
-  interact.phase = 0;
-  interact.targetPhase = 0;
+  // 重新升起(模型继续旋转)
+  flow.scattering = false;
+  setPhase(1);
 });
 document.getElementById("reload").addEventListener("click", () => location.reload());
 

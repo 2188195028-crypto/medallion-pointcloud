@@ -257,28 +257,6 @@ body {
   will-change: opacity, transform;
 }
 
-/* ---- 操作提示 ---- */
-#hint {
-  position: fixed;
-  left: 50%;
-  bottom: 9vh;
-  transform: translateX(-50%);
-  font-family: var(--font-body);
-  font-size: calc(12px * var(--layout-scale));
-  letter-spacing: 0.22em;
-  color: var(--body-subtle);
-  opacity: 0;
-  transition: opacity 0.8s ease;
-  pointer-events: none;
-  z-index: 4;
-  white-space: nowrap;
-  will-change: opacity;
-}
-
-#hint.show {
-  opacity: 1;
-}
-
 /* ---- 底部界面 ---- */
 #bottom-bar {
   position: fixed;
