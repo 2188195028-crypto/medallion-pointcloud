@@ -1,0 +1,10 @@
+# 大文件与本地生成物不入库
+assets/models/*.glb
+assets/models/*.jpg
+textures/
+shots/
+tools/node_modules/
+tools/package.json
+tools/package-lock.json
+__pycache__/
+*.pyc

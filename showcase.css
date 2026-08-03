@@ -1,0 +1,394 @@
+/* ============================================================
+   showcase.css — 深色展览页 · 国潮四季山水点云展陈
+   主题：深黑绿展览背景 / 鎏金主调 / 米白正文 / 青绿辅助
+   作者：Ligong-Wenchang  日期：2026-08-03
+   ============================================================ */
+
+/* ---- 设计令牌 ---- */
+:root {
+  /* 主题色（与 showcase-config.js theme 保持一致） */
+  --bg: #101917;
+  --gold: #dca852;
+  --gold-deep: #b8863c;
+  --body: #efe6cf;
+  --body-secondary: rgba(239, 230, 207, 0.68);
+  --body-subtle: rgba(239, 230, 207, 0.38);
+  --accent: #61b89f;
+
+  /* 字体家族（全部本地/系统回退，不依赖网络） */
+  --font-serif: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC",
+    "Source Han Serif SC", serif;
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB",
+    sans-serif;
+  --font-alias: Georgia, "Times New Roman", serif;
+
+  /* 布局缩放（JS 写入：layoutScale = min(vw/1280, vh/720)） */
+  --layout-scale: 1;
+
+  /* 参考字号（JS 从 config.referenceTypography 写入 px 值） */
+  --fs-category: 20px;
+  --fs-title: 54px;
+  --fs-alias: 22px;
+  --fs-intro: 26px;
+  --fs-body: 14px;
+  --fs-feature: 19px;
+  --fs-label: 12px;
+
+  /* 间距（随 layoutScale 缩放） */
+  --gap-title: 10px;
+  --gap-block: 26px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* 禁止滚动条 */
+}
+
+body {
+  background: var(--bg);
+  color: var(--body);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- 3D 舞台 ---- */
+#stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+#stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 极弱暗角 + 纸张颗粒质感（不干扰粒子轮廓） */
+#app::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 42%, transparent 62%, rgba(0, 0, 0, 0.22) 100%),
+    repeating-conic-gradient(rgba(239, 230, 207, 0.012) 0 0.5deg, transparent 0.5deg 1deg);
+  mix-blend-mode: normal;
+}
+
+/* ---- 左侧文字区 ---- */
+#text-panel {
+  position: fixed;
+  left: var(--text-left, 7vw);
+  top: var(--text-top, 9.5vh);
+  width: var(--text-width, 32vw);
+  z-index: 2;
+  will-change: opacity, transform;
+}
+
+#category {
+  font-family: var(--font-sans);
+  font-size: calc(var(--fs-category) * var(--layout-scale));
+  letter-spacing: 0.32em;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--gold);
+  line-height: 1.3;
+}
+
+#title {
+  font-family: var(--font-serif);
+  font-size: calc(var(--fs-title) * var(--layout-scale));
+  color: var(--gold);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: 0.08em;
+  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.7);
+}
+
+#alias {
+  font-family: var(--font-alias);
+  font-size: calc(var(--fs-alias) * var(--layout-scale));
+  color: var(--body);
+  letter-spacing: 0.3em;
+  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.9);
+}
+
+#intro {
+  font-family: var(--font-serif);
+  font-size: calc(var(--fs-intro) * var(--layout-scale));
+  color: var(--body-secondary);
+  margin-top: calc(var(--gap-title) * var(--layout-scale) * 1.0);
+}
+
+/* ---- 正文（打字机） ---- */
+#body-wrap {
+  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.55);
+  max-width: 40em;
+}
+
+#body {
+  font-family: var(--font-body);
+  font-size: calc(var(--fs-body) * var(--layout-scale));
+  line-height: 1.9;
+  color: var(--body-secondary);
+  text-align: justify;
+}
+
+#cursor {
+  display: inline-block;
+  width: 1px;
+  height: calc(var(--fs-body) * var(--layout-scale) * 1.3);
+  background: var(--gold);
+  vertical-align: -0.2em;
+  margin-left: 2px;
+  animation: cursor-blink 0.65s steps(1) infinite;
+  opacity: 0;
+}
+
+@keyframes cursor-blink {
+  0%, 55% { opacity: 1; }
+  56%, 100% { opacity: 0; }
+}
+
+/* ---- 特征词 ---- */
+#features {
+  list-style: none;
+  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: calc(7px * var(--layout-scale));
+}
+
+#features li {
+  font-family: var(--font-serif);
+  font-size: calc(var(--fs-feature) * var(--layout-scale));
+  color: var(--gold);
+  letter-spacing: 0.12em;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* ---- 主要颜色 / 工艺线索 ---- */
+/* 图录式上下排布：色板一行、标签一行，避免并排换行压到底部进度条 */
+#meta {
+  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: calc(12px * var(--layout-scale));
+  align-items: flex-start;
+}
+
+.meta-label {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: calc(var(--fs-label) * var(--layout-scale));
+  letter-spacing: 0.22em;
+  color: var(--body-subtle);
+  margin-bottom: calc(8px * var(--layout-scale));
+}
+
+#palette,
+#tags {
+  list-style: none;
+  display: flex;
+  gap: calc(10px * var(--layout-scale));
+  align-items: center;
+  flex-wrap: wrap;
+  opacity: 0;
+}
+
+/* 色点（圆形色点 + 名称文字，不只用颜色传达信息） */
+#palette li {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6px * var(--layout-scale));
+  font-size: calc(var(--fs-label) * var(--layout-scale));
+  color: var(--body-secondary);
+  opacity: 0; /* JS 按 2.75s 后依次淡入 */
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  will-change: opacity, transform;
+}
+
+#palette li::before {
+  content: "";
+  width: calc(9px * var(--layout-scale));
+  height: calc(9px * var(--layout-scale));
+  border-radius: 50%;
+  background: var(--chip, #dca852);
+  outline: 1px solid rgba(239, 230, 207, 0.25);
+  outline-offset: 1px;
+}
+
+/* 工艺标签：细边框小矩形，不使用胶囊按钮 */
+#tags li {
+  font-family: var(--font-body);
+  font-size: calc(var(--fs-label) * var(--layout-scale));
+  letter-spacing: 0.08em;
+  color: var(--body-secondary);
+  border: 1px solid rgba(239, 230, 207, 0.3);
+  border-radius: 2px;
+  padding: calc(2px * var(--layout-scale)) calc(6px * var(--layout-scale));
+  opacity: 0; /* JS 按 2.75s 后依次淡入 */
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  will-change: opacity, transform;
+}
+
+/* ---- 底部界面 ---- */
+#bottom-bar {
+  position: fixed;
+  left: var(--bottom-margin, 6vw);
+  right: var(--bottom-margin, 6vw);
+  bottom: calc(3.2vh);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: calc(20px * var(--layout-scale));
+}
+
+#counter {
+  font-family: var(--font-sans);
+  font-size: calc(12px * var(--layout-scale));
+  letter-spacing: 0.18em;
+  color: var(--body-subtle);
+  white-space: nowrap;
+}
+
+/* 细进度线：金色渐变到青绿色 */
+#progress {
+  flex: 1;
+  height: 1px;
+  background: rgba(239, 230, 207, 0.14);
+  position: relative;
+  overflow: visible;
+}
+
+#progress-fill {
+  height: 2px;
+  width: 0%;
+  background: linear-gradient(90deg, var(--gold), var(--accent));
+  box-shadow: 0 0 6px rgba(220, 168, 82, 0.35);
+  position: absolute;
+  top: -0.5px;
+  left: 0;
+}
+
+/* 重启按钮：细边框，小圆角，低调 */
+#restart {
+  font-family: var(--font-body);
+  font-size: calc(12.5px * var(--layout-scale));
+  letter-spacing: 0.18em;
+  color: var(--body-secondary);
+  background: transparent;
+  border: 1px solid rgba(239, 230, 207, 0.3);
+  border-radius: 3px;
+  padding: calc(5px * var(--layout-scale)) calc(14px * var(--layout-scale));
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+#restart:hover {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+#restart:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* ---- 加载 / 错误状态 ---- */
+#loading {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+
+#loading span {
+  font-family: var(--font-serif);
+  font-size: calc(15px * var(--layout-scale));
+  letter-spacing: 0.3em;
+  color: var(--body-subtle);
+  animation: loading-pulse 2s ease-in-out infinite;
+}
+
+@keyframes loading-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.9; }
+}
+
+#error {
+  position: fixed;
+  inset: 0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: var(--bg);
+  color: var(--body);
+}
+
+/* 修复：display:flex 会覆盖 HTML hidden 属性，导致错误面板从加载起就
+   全屏遮住展陈画面。必须显式让 hidden 优先。 */
+#error[hidden] {
+  display: none;
+}
+
+#error p {
+  font-size: 16px;
+  letter-spacing: 0.1em;
+}
+
+#reload {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--body);
+  background: transparent;
+  border: 1px solid rgba(239, 230, 207, 0.4);
+  border-radius: 3px;
+  padding: 8px 22px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+#reload:hover {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+#reload:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* ---- 减少动态效果 ---- */
+@media (prefers-reduced-motion: reduce) {
+  #cursor {
+    animation: none;
+    opacity: 1;
+  }
+  #loading span {
+    animation: none;
+  }
+  #progress-fill {
+    transition: none;
+  }
+}
