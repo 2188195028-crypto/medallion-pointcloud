@@ -94,6 +94,9 @@ export default {
     rotationSpeed: 0.12, // Y 轴慢速旋转 rad/s
     enterSlide: 0.8, // 入场时从更右侧滑入的世界距离
     exitSlide: 0.9, // 退场向左下方退出的世界距离
+    // 竖屏(手机)适配：模型居中、缩小并下移，文字区移至上端
+    portraitScale: 0.55,
+    portraitCenterY: -0.12,
     // 克制 Bloom：低强度 + 半分辨率采样，不吞回纹边框与山水纹饰
     bloomStrength: 0.18,
     bloomRadius: 0.5,

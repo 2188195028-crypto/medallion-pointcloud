@@ -26,7 +26,7 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = r"D:\BaiduNetdiskDownload\天空之城素材包\资产\幻想欧式天空建筑\第三次迭代.glb"
+SRC = r"D:\BaiduNetdiskDownload\天空之城素材包\资产\幻想欧式天空建筑\第四次.glb"
 OUT = os.path.join(ROOT, "assets", "particles.bin")
 
 N_PARTICLES = 180000

@@ -71,6 +71,7 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+  touch-action: none; /* 触摸拖动直接控制粒子,不被浏览器滚动拦截 */
 }
 
 /* 极弱暗角 + 纸张颗粒质感（不干扰粒子轮廓） */
@@ -389,6 +390,22 @@ body {
 #reload:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
+}
+
+/* ---- 竖屏(手机)适配 ---- */
+/* 文字区移到上端、加宽;模型由 JS 居中下移;底部控件收紧 */
+@media (orientation: portrait) {
+  #text-panel {
+    left: 7vw;
+    top: 5.5vh;
+    width: 86vw;
+  }
+  #body-wrap {
+    max-width: none;
+  }
+  #bottom-bar {
+    bottom: 2.6vh;
+  }
 }
 
 /* ---- 减少动态效果 ---- */

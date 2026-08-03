@@ -119,7 +119,9 @@ try {
   showError("浏览器不支持 WebGL，无法显示点云展陈。");
   throw e;
 }
-const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+// 触屏设备(手机/平板)性能降档:DPR 上限 1.5、关闭 Bloom
+const TOUCH_DEVICE = window.matchMedia("(pointer: coarse)").matches;
+const pixelRatio = Math.min(window.devicePixelRatio || 1, TOUCH_DEVICE ? 1.5 : 2);
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -151,6 +153,7 @@ const bloomPass = new UnrealBloomPass(
   STAGE.bloomRadius,
   STAGE.bloomThreshold
 );
+if (TOUCH_DEVICE) bloomPass.enabled = false; // 移动端关 Bloom 保帧率
 composer.addPass(bloomPass);
 
 // ---------- 着色器 ----------
@@ -164,6 +167,8 @@ const vertexShader = /* glsl */ `
   attribute float aSize;
 
   uniform float uTime;
+  uniform float uPhase;   // 0=散开 1=成形（自动时间线或鼠标/触摸交互统一输入）
+  uniform float uPhaseFade; // 全场淡出（自动循环尾段；交互模式恒 1）
   uniform float uPixelRatio;
   uniform float uViewportScale;
   uniform float uDepthRef;
@@ -182,22 +187,19 @@ const vertexShader = /* glsl */ `
   void main() {
     float t = uTime;
 
-    // 聚合：外轮廓/高曲率粒子优先，随后填充
-    float riseStart = 0.08 + aDelay * 2.4;
-    float riseEnd = riseStart + 1.25;
-    float rise = smoothstep01(riseStart, riseEnd, t);
+    // 聚合：全局 phase + 粒子延迟错峰（外轮廓/高曲率粒子优先）
+    // uPhase=1 时全部 rise=1；中间值按 aDelay 拉开先后
+    float rise = clamp(uPhase * 1.8 - aDelay * 0.8, 0.0, 1.0);
     rise = mix(rise, 1.0, uReduced); // 减少动态模式：快速聚合
 
-    // 溶解：边缘粒子优先
-    float dStart = 7.4 + (1.0 - aEdge) * 1.1 + aSeed * 0.35;
-    float dEnd = dStart + 1.5;
-    float dissolve = smoothstep01(dStart, dEnd, t);
+    // 溶解：边缘粒子优先（aEdge 高者先散）
+    float dissolve = clamp((1.0 - uPhase) * 1.8 - (1.0 - aEdge) * 0.5, 0.0, 1.0);
     dissolve = mix(dissolve, 0.0, uReduced);
 
-    float fade = 1.0 - smoothstep01(8.8, 9.75, t);
+    float fade = uPhaseFade;
 
-    // 表面法线方向的极小呼吸波动
-    float breath = sin(t * 3.0 + aSeed * 40.0) * 0.006 * (1.0 - uReduced);
+    // 表面法线方向的极小呼吸波动（仅成形后）
+    float breath = sin(t * 3.0 + aSeed * 40.0) * 0.006 * rise * (1.0 - uReduced);
     vec3 target = position + aNormal * breath;
 
     // 散开位置：模型下方地面区域，带少量漂移
@@ -250,12 +252,91 @@ const fragmentShader = /* glsl */ `
 
 const uniforms = {
   uTime: { value: 0 },
+  uPhase: { value: 0 }, // 0=散开 1=成形（自动时间线或交互输入）
+  uPhaseFade: { value: 1 },
   uPixelRatio: { value: pixelRatio },
   uViewportScale: { value: 1 },
   uDepthRef: { value: depthRef },
   uSize: { value: REF },
   uReduced: { value: REDUCED ? 1 : 0 },
 };
+
+// ---------- 交互控制 ----------
+// 鼠标/触摸:模型始终自动旋转;按住拖动(上下)连续控制粒子升起/消散,
+// 单击切换状态(散开↔成形)。交互结束后:成形→稳定 4s→自动消散→恢复自动循环。
+const interact = {
+  engaged: false, // 交互接管中
+  dragging: false, // 拖动中
+  easing: false, // 向目标相位缓动
+  stage: "idle", // idle | stable(成形稳定) | dissolving
+  startX: 0,
+  startY: 0,
+  moved: false,
+  phase: 0, // 当前相位
+  targetPhase: 0, // 缓动目标
+  stableUntil: 0, // 稳定结束时间
+};
+const IS_PORTRAIT = () => window.innerHeight > window.innerWidth;
+
+function onPointerDown(e) {
+  if (REDUCED) return; // 减少动态模式：保持稳定展示，不接管交互
+  interact.engaged = true;
+  interact.dragging = true;
+  interact.moved = false;
+  interact.easing = false;
+  interact.stage = "idle";
+  interact.startX = e.clientX;
+  interact.startY = e.clientY;
+}
+function onPointerMove(e) {
+  if (!interact.dragging) return;
+  const dx = e.clientX - interact.startX;
+  const dy = interact.startY - e.clientY;
+  if (Math.abs(dx) > 10 || Math.abs(dy) > 10) interact.moved = true;
+  if (interact.moved) {
+    // 纵向拖动 → 相位:向上拖升起(聚合),向下拖消散
+    interact.phase = Math.min(1, Math.max(0, dy / (window.innerHeight * 0.4)));
+  }
+}
+function onPointerUp() {
+  if (!interact.dragging) return;
+  interact.dragging = false;
+  // 拖动结束或点击:缓动到最近的稳定端(0=散开,1=成形)
+  interact.targetPhase = interact.phase >= 0.5 ? 1 : 0;
+  interact.easing = true;
+}
+canvas.addEventListener("pointerdown", onPointerDown);
+window.addEventListener("pointermove", onPointerMove);
+window.addEventListener("pointerup", onPointerUp);
+
+// 每帧推进交互状态机
+function updateInteract(dt) {
+  if (!interact.engaged) return;
+  if (interact.dragging) return; // 相位由指针实时控制
+  if (interact.easing) {
+    const diff = interact.targetPhase - interact.phase;
+    const step = dt * 1.8; // 约 0.55s 完成过渡
+    if (Math.abs(diff) <= step) {
+      interact.phase = interact.targetPhase;
+      interact.easing = false;
+      if (interact.targetPhase >= 1) {
+        // 成形:稳定展示 4 秒后自动消散
+        interact.stage = "stable";
+        interact.stableUntil = performance.now() + 4000;
+      } else {
+        // 回到散开:恢复自动循环
+        interact.engaged = false;
+        clock = 0;
+      }
+    } else {
+      interact.phase += Math.sign(diff) * step;
+    }
+  } else if (interact.stage === "stable" && performance.now() > interact.stableUntil) {
+    interact.stage = "dissolving";
+    interact.targetPhase = 0;
+    interact.easing = true;
+  }
+}
 
 function makeMaterial() {
   return new THREE.ShaderMaterial({
@@ -751,8 +832,10 @@ function applyLayout() {
   uniforms.uViewportScale.value = h / RV.height;
   uniforms.uPixelRatio.value = renderer.getPixelRatio();
 
-  // 整页连续布局缩放
-  const layoutScale = Math.min(w / RV.width, h / RV.height);
+  // 整页连续布局缩放：桌面以 1280×720 为基准；竖屏以宽度 700px 为基准(手机字号)
+  const layoutScale = IS_PORTRAIT()
+    ? Math.max(0.45, Math.min(1.1, w / 700))
+    : Math.min(w / RV.width, h / RV.height);
   const root = document.documentElement.style;
   root.setProperty("--layout-scale", layoutScale.toFixed(4));
   root.setProperty("--text-left", config.referenceTextLayout.left);
@@ -770,8 +853,14 @@ function applyLayout() {
   root.setProperty("--fs-feature", T.feature + "px");
   root.setProperty("--fs-label", T.label + "px");
 
-  // 模型屏幕位置：中心位于视口 72%（frame 中叠加入场/退场滑动）
-  baseX = Math.tan(FOV_RAD) * (w / h) * STAGE.modelXFraction * STAGE.distance;
+  // 模型屏幕位置：桌面左文右图(中心 ~72%)；竖屏(手机)居中并整体缩小
+  if (IS_PORTRAIT()) {
+    baseX = 0;
+    group.scale.setScalar(STAGE.portraitScale);
+  } else {
+    baseX = Math.tan(FOV_RAD) * (w / h) * STAGE.modelXFraction * STAGE.distance;
+    group.scale.setScalar(1);
+  }
   group.position.x = baseX;
 }
 
@@ -842,13 +931,20 @@ let fpsSum = 0, fpsN = 0;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+
+  updateInteract(dt);
+
   if (FIX_T !== null) {
     clock = FIX_T; // 调试冻结：截图验证用
     rotTotal = FIX_T * STAGE.rotationSpeed;
     phaseTotal = FIX_T;
-  } else if (!REDUCED) {
+  } else if (!REDUCED && !interact.engaged) {
     clock += dt;
     if (clock >= DURATION) clock -= DURATION;
+    rotTotal += dt * STAGE.rotationSpeed;
+    phaseTotal += dt;
+  } else if (!REDUCED) {
+    // 交互中：时间线暂停，但模型保持自动旋转与浮动
     rotTotal += dt * STAGE.rotationSpeed;
     phaseTotal += dt;
   } else {
@@ -859,27 +955,40 @@ function frame(now) {
   const t = clock;
   uniforms.uTime.value = t;
 
-  // 模型：慢速旋转（连续相位）+ 极轻微浮动 + 入场滑入/退场滑出。
-  // 9.4s 后粒子已渐隐，模型在退场位平滑回位到入场起点，循环衔接无单帧瞬跳。
-  if (!REDUCED) {
-    group.rotation.y = rotTotal;
-    group.position.y = Math.sin(phaseTotal * 0.6) * STAGE.floatAmp;
-    const fIn = smooth(0.08, 2.9, t);
-    const fOut = smooth(7.6, 9.4, t);
-    const ret = smooth(9.4, 9.98, t); // 退场后不可见回位
-    group.position.x =
-      baseX +
-      STAGE.enterSlide * (1 - fIn) -
-      STAGE.exitSlide * fOut +
-      (STAGE.enterSlide + STAGE.exitSlide) * ret;
+  // 相位（升起/消散）：自动时间线映射，或鼠标/触摸交互输入
+  if (interact.engaged) {
+    uniforms.uPhase.value = interact.phase;
+    uniforms.uPhaseFade.value = 1;
   } else {
-    group.rotation.y = rotTotal;
+    uniforms.uPhase.value = smooth(0.08, 3.73, t) * (1 - smooth(7.4, 9.9, t));
+    uniforms.uPhaseFade.value = 1 - smooth(8.8, 9.75, t);
+  }
+
+  // 模型：慢速旋转（连续相位，交互时也不停）+ 极轻微浮动。
+  // 交互时固定在展示位；自动模式保留入场滑入/退场滑出（9.4s 后不可见回位）。
+  group.rotation.y = rotTotal;
+  const baseY = IS_PORTRAIT() ? STAGE.portraitCenterY : 0; // 竖屏模型下移
+  if (!REDUCED) {
+    group.position.y = baseY + Math.sin(phaseTotal * 0.6) * STAGE.floatAmp;
+    if (!interact.engaged) {
+      const fIn = smooth(0.08, 2.9, t);
+      const fOut = smooth(7.6, 9.4, t);
+      const ret = smooth(9.4, 9.98, t); // 退场后不可见回位
+      group.position.x =
+        baseX +
+        STAGE.enterSlide * (1 - fIn) -
+        STAGE.exitSlide * fOut +
+        (STAGE.enterSlide + STAGE.exitSlide) * ret;
+    } else {
+      group.position.x = baseX;
+    }
+  } else {
     group.position.y = 0;
     group.position.x = baseX;
   }
 
   updateText(t);
-  updateProgress(t);
+  if (!interact.engaged) updateProgress(t);
 
   composer.render();
   fpsSum += dt; fpsN++;
@@ -888,6 +997,11 @@ function frame(now) {
 
 restartBtn.addEventListener("click", () => {
   clock = 0; // 时间归零；旋转/浮动相位保持连续，衔接无瞬跳
+  // 取消交互接管，恢复自动循环
+  interact.engaged = false;
+  interact.dragging = false;
+  interact.easing = false;
+  interact.stage = "idle";
 });
 document.getElementById("reload").addEventListener("click", () => location.reload());
 
@@ -909,6 +1023,9 @@ function reportDiagnostics() {
   if (!pointsMain) return;
   const w = window.innerWidth, h = window.innerHeight;
   const g = pointsMain.geometry;
+  const diagLayoutScale = IS_PORTRAIT()
+    ? Math.max(0.45, Math.min(1.1, w / 700))
+    : Math.min(w / RV.width, h / RV.height);
   // 粒子坐标范围(验证 GLB/data 两种模式坐标系一致)
   let pMin = [1e9, 1e9, 1e9], pMax = [-1e9, -1e9, -1e9];
   const posAttr = g.attributes.position;
@@ -921,7 +1038,7 @@ function reportDiagnostics() {
     }
   }
   const coordRange = pMin.map((v, k) => [+v.toFixed(3), +pMax[k].toFixed(3)]);
-  const layoutScale = Math.min(w / RV.width, h / RV.height);
+  const layoutScale = diagLayoutScale;
   const cssPoint = REF * (h / RV.height);
   const physPoint = cssPoint * renderer.getPixelRatio();
   // 模型屏幕包围盒与文字安全间距
