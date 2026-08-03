@@ -13,6 +13,7 @@ export default {
   titleZh: "繁荣昌盛",
   aliasEn: "FAN RONG CHANG SHENG",
   introZh: "又称“四季山水圆盘”",
+  introSubZh: "汉中福地茶业墙绘",
   bodyZh:
     "圆形满构图，中心“繁荣昌盛”四字作鎏金大字，外环以回纹边框。" +
     "四周环布四季山水：春山牡丹、宝塔祥云，秋山红枫、银杏点缀，" +

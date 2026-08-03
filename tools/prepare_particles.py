@@ -26,7 +26,7 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = r"D:\BaiduNetdiskDownload\天空之城素材包\资产\幻想欧式天空建筑\第二次精简.glb"
+SRC = r"D:\BaiduNetdiskDownload\天空之城素材包\资产\幻想欧式天空建筑\第三次迭代.glb"
 OUT = os.path.join(ROOT, "assets", "particles.bin")
 
 N_PARTICLES = 180000
@@ -117,12 +117,20 @@ def extract_meshes(gltf, bindata):
         if "TEXCOORD_0" in prim["attributes"]:
             uv, _ = read_accessor(gltf, bindata, prim["attributes"]["TEXCOORD_0"])
         mat_idx = prim.get("material")
+        # 第三次迭代导出丢失了主 mesh 的 UV:标记 planar 投影轴(最薄轴),
+        # 取色时按盘面坐标直接映射贴图,避免全部退化为兜底色
+        planar_axis = None
+        if uv is None:
+            mn = pos4[:, :3].min(axis=0)
+            mx = pos4[:, :3].max(axis=0)
+            planar_axis = ["x", "y", "z"][int(np.argmin(mx - mn))]
         out.append(
             {
                 "pos": pos4[:, :3].astype(np.float64),
                 "idx": idx,
                 "uv": uv,
                 "mat_idx": mat_idx,
+                "planar_axis": planar_axis,
             }
         )
     return out
@@ -181,29 +189,45 @@ def pick_by_cum(rng, cum, total, n):
     return np.searchsorted(cum, r)
 
 
-def sample_color(mesh, mat_to_img, tris, s, t):
-    """UV 插值取色 → u8×n×3;无 UV/图 → fallback"""
+def sample_color(mesh, mat_to_img, tris, s, t, pts):
+    """UV 插值取色 → u8×n×3;无 UV 用 planar 投影;无贴图 → fallback"""
     n = len(s)
     col = np.zeros((n, 3), dtype=np.uint8)
     img = mat_to_img.get(mesh["mat_idx"])
     if img is None:
         col[:] = (255, 239, 230, 207)[:3]  # 主题米白兜底
         return col
-    uv = mesh["uv"]
-    if uv is None:
+    if mesh["uv"] is None and mesh.get("planar_axis"):
+        # 无 UV 的薄盘:沿最薄轴(盘面法线)做平面投影映射贴图中央。
+        # 直接用采样点局部坐标投影(pts 已是三角形重心插值结果)。
+        ax = mesh["planar_axis"]
+        ai = {"x": 1, "y": 2, "z": 0}[ax]  # 盘面两轴
+        bi = {"x": 2, "y": 0, "z": 1}[ax]
+        uu = (pts[:, ai] + 1) / 2  # 局部坐标 [-1,1] → UV [0,1]
+        vv = (pts[:, bi] + 1) / 2
+    elif mesh["uv"] is None:
         col[:] = (255, 239, 230, 207)[:3]
         return col
-    uvA = uv[tris[:, 0]]
-    uvB = uv[tris[:, 1]]
-    uvC = uv[tris[:, 2]]
-    u = (1 - s - t)[:, None] * uvA + s[:, None] * uvB + t[:, None] * uvC
-    inside = (u[:, 0] >= 0) & (u[:, 0] <= 1) & (u[:, 1] >= 0) & (u[:, 1] <= 1)
+    else:
+        uv = mesh["uv"]
+        uvA = uv[tris[:, 0]]
+        uvB = uv[tris[:, 1]]
+        uvC = uv[tris[:, 2]]
+        uvuv = (1 - s - t)[:, None] * uvA + s[:, None] * uvB + t[:, None] * uvC
+        uu = uvuv[:, 0]
+        vv = uvuv[:, 1]
+    uu = np.clip(uu, 0, 1)
+    vv = np.clip(vv, 0, 1)
     w, h = img.size
-    px = np.clip(np.round(u[:, 0] * (w - 1)), 0, w - 1).astype(int)
-    py = np.clip(np.round(u[:, 1] * (h - 1)), 0, h - 1).astype(int)
+    px = np.clip(np.round(uu * (w - 1)), 0, w - 1).astype(int)
+    py = np.clip(np.round(vv * (h - 1)), 0, h - 1).astype(int)
     arr = np.asarray(img)
-    vals = arr[py, px]  # glTF v=0 顶部 ↔ PIL y=0 顶部,与浏览器一致
-    col[inside] = vals[inside]
+    col[:] = arr[py, px]  # glTF v=0 顶部 ↔ PIL y=0 顶部,与浏览器一致
+    # 金色增强:仅提亮中等亮度的暖色(暗金浮雕),亮白/米白不动,避免过曝
+    warm = (col[:, 0] > 100) & (col[:, 0] < 215) & (col[:, 0].astype(int) - col[:, 2].astype(int) > 40)
+    if warm.any():
+        col[warm, 0] = np.minimum(255, (col[warm, 0].astype(np.float32) * 1.28)).astype(np.uint8)
+        col[warm, 1] = np.minimum(255, (col[warm, 1].astype(np.float32) * 1.12)).astype(np.uint8)
     return col
 
 
@@ -259,11 +283,15 @@ def main():
         return pts.astype(np.float32)
 
     # 粒子分配(round + 补差,总数精确)
+    # 小盘(金字浮雕,mesh 下标 0)面积小但细节重要:加权 ×2,
+    # 保证"繁荣昌盛"笔画粒子密度(规范允许调整采样分布以辨认细节)
     detail_n = round(N_PARTICLES * DETAIL_RATIO)
     surface_n = N_PARTICLES - detail_n
-    surf_counts = [round(surface_n * (p["areas"].sum() / total_area)) for p in prepped]
+    surf_weights = [p["areas"].sum() * (2.0 if i == 0 else 1.0) for i, p in enumerate(prepped)]
+    det_weights = [p["detailW"].sum() * (2.0 if i == 0 else 1.0) for i, p in enumerate(prepped)]
+    surf_counts = [round(surface_n * (w / sum(surf_weights))) for w in surf_weights]
     surf_counts[np.argmax(surf_counts)] += surface_n - sum(surf_counts)
-    det_counts = [round(detail_n * (p["detailW"].sum() / total_detail)) for p in prepped]
+    det_counts = [round(detail_n * (w / sum(det_weights))) for w in det_weights]
     det_counts[np.argmax(det_counts)] += detail_n - sum(det_counts)
 
     targets = np.zeros((N_PARTICLES, 3), dtype=np.float32)
@@ -300,7 +328,7 @@ def main():
             pts = vA[tri_idx] + s[:, None] * e1[tri_idx] + t[:, None] * e2[tri_idx]
             nrm = np.cross(e1[tri_idx], e2[tri_idx])
             nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
-            col = sample_color(m, mat_to_img, tris[tri_idx], s, t)
+            col = sample_color(m, mat_to_img, tris[tri_idx], s, t, pts)
             seed, delay, edge, size = scatter_meta(kind, count, rng)
             q = p + count
             targets[p:q] = pts

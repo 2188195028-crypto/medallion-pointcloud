@@ -113,7 +113,7 @@ body {
   font-weight: 600;
   line-height: 1.12;
   letter-spacing: 0.08em;
-  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.7);
+  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.65);
 }
 
 #alias {
@@ -121,20 +121,32 @@ body {
   font-size: calc(var(--fs-alias) * var(--layout-scale));
   color: var(--body);
   letter-spacing: 0.3em;
-  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.9);
+  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.85);
 }
 
 #intro {
   font-family: var(--font-serif);
   font-size: calc(var(--fs-intro) * var(--layout-scale));
   color: var(--body-secondary);
-  margin-top: calc(var(--gap-title) * var(--layout-scale) * 1.0);
+  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.9);
+}
+
+/* 引言下的副题(如"汉中福地茶业墙绘")：衬线小字、更淡 */
+#intro-sub {
+  font-family: var(--font-serif);
+  font-size: calc(var(--fs-intro) * var(--layout-scale) * 0.72);
+  letter-spacing: 0.16em;
+  color: var(--gold);
+  opacity: 0.82;
+  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.45);
+  will-change: opacity, transform;
 }
 
 /* ---- 正文（打字机） ---- */
+/* 行宽由 #text-panel 的 32vw 列宽控制(随视口/缩放连续变化);
+   固定 40em 上限会在高分辨率下限制行宽导致异常换行 */
 #body-wrap {
-  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.55);
-  max-width: 40em;
+  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.5);
 }
 
 #body {
@@ -164,10 +176,10 @@ body {
 /* ---- 特征词 ---- */
 #features {
   list-style: none;
-  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.6);
+  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.55);
   display: flex;
   flex-direction: column;
-  gap: calc(7px * var(--layout-scale));
+  gap: calc(6px * var(--layout-scale));
 }
 
 #features li {
@@ -182,10 +194,10 @@ body {
 /* ---- 主要颜色 / 工艺线索 ---- */
 /* 图录式上下排布：色板一行、标签一行，避免并排换行压到底部进度条 */
 #meta {
-  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.7);
+  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.62);
   display: flex;
   flex-direction: column;
-  gap: calc(12px * var(--layout-scale));
+  gap: calc(10px * var(--layout-scale));
   align-items: flex-start;
 }
 

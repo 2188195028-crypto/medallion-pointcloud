@@ -73,6 +73,7 @@ const els = {
   title: document.getElementById("title"),
   alias: document.getElementById("alias"),
   intro: document.getElementById("intro"),
+  introSub: document.getElementById("intro-sub"),
 };
 
 function showError(msg) {
@@ -87,6 +88,7 @@ els.category.textContent = config.categoryEn;
 els.title.textContent = config.titleZh;
 els.alias.textContent = config.aliasEn;
 els.intro.textContent = config.introZh;
+if (els.introSub) els.introSub.textContent = config.introSubZh || "";
 config.features.forEach((f) => {
   const li = document.createElement("li");
   li.textContent = f;
@@ -221,8 +223,8 @@ const vertexShader = /* glsl */ `
                  * (uDepthRef / max(-mv.z, 0.001));
     gl_PointSize = min(gl_PointSize, 64.0);
 
-    // 轻微明暗差异 + 边缘闪烁
-    float shimmer = 0.88 + 0.12 * sin(t * 6.0 + aSeed * 90.0) * (1.0 - uReduced);
+    // 轻微明暗差异 + 边缘闪烁（下限 0.94，避免中心金字偏暗）
+    float shimmer = 0.94 + 0.06 * sin(t * 6.0 + aSeed * 90.0) * (1.0 - uReduced);
     vColor = aColor * shimmer;
     vAlpha = (0.25 + 0.75 * rise) * (1.0 - dissolve) * fade;
     vEdge = aEdge;
@@ -800,6 +802,7 @@ function updateText(t) {
   style(els.title, TL.textInStart + 0.08, TL.textInEnd + 0.08, TL.textOutStart, TL.textOutEnd);
   style(els.alias, TL.textInStart + 0.15, TL.textInEnd + 0.15, TL.textOutStart, TL.textOutEnd);
   style(els.intro, TL.textInStart + 0.24, TL.textInEnd + 0.24, TL.textOutStart, TL.textOutEnd);
+  style(els.introSub, TL.textInStart + 0.32, TL.textInEnd + 0.32, TL.textOutStart, TL.textOutEnd);
   style(bodyWrap, TL.textInStart + 0.3, TL.textInEnd + 0.3, TL.textOutStart, TL.textOutEnd);
   // 修复要点：#palette/#tags 的 CSS 初始 opacity 为 0，必须淡入 ul 本身
   //（旧代码误设到外层 .palette-wrap，导致 ul 永远不可见）
