@@ -260,25 +260,28 @@ const uniforms = {
 };
 
 // ---------- 展示流程控制 ----------
-// 进入页面:粒子自动升起成形;平时模型保持旋转、成形展示不变;
-// 消散/升起由鼠标滚轮或上下滑动实时控制(下滑/前翻 = 消散,上滑/回翻 = 升起)。
+// 进入页面:粒子自动升起成形(慢速入场动画);平时模型保持旋转、成形展示不变;
+// 消散/升起由"一次明确的滑动动作"触发(滚轮滚一下 / 上下滑一次),
+// 不做连续累计控制,点击/轻触不会误触发。
 const flow = {
   phase: 0, // 0=散开 1=成形
   target: 1, // 进入默认升起
   easing: true,
+  speed: 0.9, // 当前缓动速度(入场动画约 1.1s)
 };
 const IS_PORTRAIT = () => window.innerHeight > window.innerWidth;
 
-function setPhase(target) {
+function setPhase(target, speed) {
   flow.target = Math.min(1, Math.max(0, target));
+  flow.speed = speed ?? 3.0;
   flow.easing = true;
 }
 
-// 每帧推进相位缓动(快速跟随,滑动跟手)
+// 每帧推进相位缓动(入场慢速 ~0.9s 动画;触发消散/升起快速 0.33s)
 function updateFlow(dt) {
   if (!flow.easing) return;
   const diff = flow.target - flow.phase;
-  const step = dt * 3.0;
+  const step = dt * flow.speed;
   if (Math.abs(diff) <= step) {
     flow.phase = flow.target;
     flow.easing = false;
@@ -287,35 +290,53 @@ function updateFlow(dt) {
   }
 }
 
-// 滑动输入:累计"前进量"(滚轮下滚 / 手指上滑 = 前进 = 消散)
-const SCROLL_STEP = 700; // 滑动累计量达到该值完成一次消散或升起
-let advance = 0; // -SCROLL_STEP .. SCROLL_STEP
+// 单次手势触发:滚轮在 450ms 窗口内累计位移超过阈值 → 触发一次
+const GESTURE_THRESHOLD = 80;
+let gestureAccum = 0;
+let gestureTimer = null;
 
-function addAdvance(d) {
-  advance = Math.max(-SCROLL_STEP, Math.min(SCROLL_STEP, advance + d));
-  setPhase(1 - advance / SCROLL_STEP);
+function handleGesture(d) {
+  gestureAccum += d;
+  if (Math.abs(gestureAccum) >= GESTURE_THRESHOLD) {
+    if (gestureAccum > 0) setPhase(0, 3.0); // 下滑/前翻 → 消散
+    else setPhase(1, 2.2); // 上滑/回翻 → 升起
+    gestureAccum = 0;
+  }
+  clearTimeout(gestureTimer);
+  gestureTimer = setTimeout(() => { gestureAccum = 0; }, 450);
 }
 
-window.addEventListener("wheel", (e) => addAdvance(e.deltaY), { passive: true });
+window.addEventListener("wheel", (e) => handleGesture(e.deltaY), { passive: true });
+
+// 触摸:一次手势(开始→结束)的总位移判定,点击(位移≈0)不会误触发
 let touchStartY = null;
-window.addEventListener("touchstart", (e) => { touchStartY = e.touches[0].clientY; }, { passive: true });
+let touchAccum = 0;
+window.addEventListener("touchstart", (e) => {
+  touchStartY = e.touches[0].clientY;
+  touchAccum = 0;
+}, { passive: true });
 window.addEventListener("touchmove", (e) => {
   if (touchStartY === null) return;
-  addAdvance(touchStartY - e.touches[0].clientY); // 手指上滑 = 前进
+  touchAccum = touchStartY - e.touches[0].clientY; // 只记录,不触发
 }, { passive: true });
-window.addEventListener("touchend", () => { touchStartY = null; });
+window.addEventListener("touchend", () => {
+  if (touchStartY === null) return;
+  if (Math.abs(touchAccum) >= 60) {
+    if (touchAccum > 0) setPhase(0, 3.0); // 手指上滑 → 消散
+    else setPhase(1, 2.2); // 手指下滑 → 升起
+  }
+  touchStartY = null;
+});
 
-// 页面切走/关闭 → 消散;回到页面 → 重新升起
+// 页面切走/关闭 → 消散;回到页面 → 慢速重新升起(入场动画)
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
-    advance = SCROLL_STEP;
-    setPhase(0);
+    setPhase(0, 2.5);
   } else {
-    advance = 0;
-    setPhase(1);
+    setPhase(1, 0.9);
   }
 });
-window.addEventListener("beforeunload", () => setPhase(0));
+window.addEventListener("beforeunload", () => setPhase(0, 2.5));
 
 function makeMaterial() {
   return new THREE.ShaderMaterial({
@@ -936,9 +957,8 @@ function frame(now) {
 }
 
 restartBtn.addEventListener("click", () => {
-  // 重置滑动量并重新升起(模型继续旋转)
-  advance = 0;
-  setPhase(1);
+  // 重新升起(慢速入场动画;模型继续旋转)
+  setPhase(1, 0.9);
 });
 document.getElementById("reload").addEventListener("click", () => location.reload());
 
