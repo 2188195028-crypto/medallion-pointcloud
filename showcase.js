@@ -260,27 +260,25 @@ const uniforms = {
 };
 
 // ---------- 展示流程控制 ----------
-// 进入页面:粒子自动升起成形;翻页(滚动/切走)时粒子消散;
-// 其他时候模型保持旋转、成形展示不变。
+// 进入页面:粒子自动升起成形;平时模型保持旋转、成形展示不变;
+// 消散/升起由鼠标滚轮或上下滑动实时控制(下滑/前翻 = 消散,上滑/回翻 = 升起)。
 const flow = {
   phase: 0, // 0=散开 1=成形
   target: 1, // 进入默认升起
   easing: true,
-  scattering: false, // 已触发消散(防重复触发)
 };
 const IS_PORTRAIT = () => window.innerHeight > window.innerWidth;
 
 function setPhase(target) {
-  flow.target = target;
+  flow.target = Math.min(1, Math.max(0, target));
   flow.easing = true;
-  if (target <= 0) flow.scattering = true;
 }
 
-// 每帧推进相位缓动(升起稍缓、消散稍快)
+// 每帧推进相位缓动(快速跟随,滑动跟手)
 function updateFlow(dt) {
   if (!flow.easing) return;
   const diff = flow.target - flow.phase;
-  const step = dt * (flow.target > flow.phase ? 1.1 : 1.5);
+  const step = dt * 3.0;
   if (Math.abs(diff) <= step) {
     flow.phase = flow.target;
     flow.easing = false;
@@ -289,15 +287,31 @@ function updateFlow(dt) {
   }
 }
 
-// 翻页 = 滚动 / 触摸滑动 / 页面切走 → 粒子消散;回到页面 → 重新升起
-window.addEventListener("wheel", () => { if (!flow.scattering) setPhase(0); }, { passive: true });
-window.addEventListener("touchmove", () => { if (!flow.scattering) setPhase(0); }, { passive: true });
-window.addEventListener("scroll", () => { if (!flow.scattering) setPhase(0); }, { passive: true });
+// 滑动输入:累计"前进量"(滚轮下滚 / 手指上滑 = 前进 = 消散)
+const SCROLL_STEP = 700; // 滑动累计量达到该值完成一次消散或升起
+let advance = 0; // -SCROLL_STEP .. SCROLL_STEP
+
+function addAdvance(d) {
+  advance = Math.max(-SCROLL_STEP, Math.min(SCROLL_STEP, advance + d));
+  setPhase(1 - advance / SCROLL_STEP);
+}
+
+window.addEventListener("wheel", (e) => addAdvance(e.deltaY), { passive: true });
+let touchStartY = null;
+window.addEventListener("touchstart", (e) => { touchStartY = e.touches[0].clientY; }, { passive: true });
+window.addEventListener("touchmove", (e) => {
+  if (touchStartY === null) return;
+  addAdvance(touchStartY - e.touches[0].clientY); // 手指上滑 = 前进
+}, { passive: true });
+window.addEventListener("touchend", () => { touchStartY = null; });
+
+// 页面切走/关闭 → 消散;回到页面 → 重新升起
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
+    advance = SCROLL_STEP;
     setPhase(0);
   } else {
-    flow.scattering = false;
+    advance = 0;
     setPhase(1);
   }
 });
@@ -922,8 +936,8 @@ function frame(now) {
 }
 
 restartBtn.addEventListener("click", () => {
-  // 重新升起(模型继续旋转)
-  flow.scattering = false;
+  // 重置滑动量并重新升起(模型继续旋转)
+  advance = 0;
   setPhase(1);
 });
 document.getElementById("reload").addEventListener("click", () => location.reload());
