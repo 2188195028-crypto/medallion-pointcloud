@@ -995,6 +995,7 @@ function buildPoints(data, stats) {
     uvMeshes: stats.uvMeshes ?? 0,
     texMeshes: stats.texMeshes ?? 0,
   };
+  window.__showcaseReady = true; // 喂饱 index.html 的加载看门狗
   console.log("[showcase] 实际粒子数量 =", geometry.attributes.position.count);
 
   // 初始化布局并启动

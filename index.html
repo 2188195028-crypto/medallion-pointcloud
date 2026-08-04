@@ -5,11 +5,13 @@
   <title>繁荣昌盛 · FOUR SEASONS MEDALLION 点云展陈</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="showcase.css" />
+  <!-- three.js 模块走 jsDelivr CDN(国内加载快:Pages 实测 three.core.js 需 14s,
+       jsDelivr ~2s;仓库 assets/three/ 已入库,离线开发可改回 ./assets/three/) -->
   <script type="importmap">
   {
     "imports": {
-      "three": "./assets/three/three.module.js",
-      "three/addons/": "./assets/three/"
+      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.1/assets/three/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.1/assets/three/"
     }
   }
   </script>
@@ -77,6 +79,18 @@
       document.getElementById("error-msg").textContent =
         "页面需要本地服务器才能加载模型：请双击项目里的 start.bat 一键启动，或在命令行运行 python tools/serve_debug.py 8137，然后访问 http://127.0.0.1:8137/";
     }
+    // 加载看门狗：25s 内 showcase.js 未初始化(CDN 不可达/网络异常)则给出错误提示，
+    // 避免 HR 打开作品集时卡在无限加载转圈
+    window.__showcaseReady = false;
+    setTimeout(function () {
+      if (!window.__showcaseReady) {
+        document.getElementById("loading").style.display = "none";
+        var err = document.getElementById("error");
+        err.hidden = false;
+        document.getElementById("error-msg").textContent =
+          "3D 资源加载超时，请检查网络后刷新重试。(jsDelivr CDN 不可达时会自动回退，稍等片刻即可)";
+      }
+    }, 25000);
   </script>
 
   <script type="module" src="showcase.js"></script>
