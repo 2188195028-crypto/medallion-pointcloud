@@ -903,6 +903,14 @@ let photoTex = null; // { data, w, h, cx, cy, radius }
 function loadPhotoTexture() {
   return new Promise((resolve) => {
     const img = new Image();
+    img.onerror = () => {
+      // CDN 照片失败 → 回退本地;本地也失败 → 回退色板重映射
+      if (img.src !== config.photoPath) {
+        img.src = config.photoPath;
+        return;
+      }
+      resolve();
+    };
     img.onload = () => {
       try {
         // 保持原尺寸加载(1290×1315,圆盘几何硬编码在 config,不缩放避免坐标换算)
@@ -926,8 +934,7 @@ function loadPhotoTexture() {
       }
       resolve();
     };
-    img.onerror = () => resolve();
-    img.src = config.photoPath;
+    img.src = config.cdnBase ? config.cdnBase + config.photoPath : config.photoPath;
   });
 }
 
