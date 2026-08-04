@@ -903,6 +903,8 @@ let photoTex = null; // { data, w, h, cx, cy, radius }
 function loadPhotoTexture() {
   return new Promise((resolve) => {
     const img = new Image();
+    // 照片可能来自 CDN(crossOrigin=anonymous 避免 canvas 被跨域污染,getImageData 才能用)
+    img.crossOrigin = "anonymous";
     img.onerror = () => {
       // CDN 照片失败 → 回退本地;本地也失败 → 回退色板重映射
       if (img.src !== config.photoPath) {
