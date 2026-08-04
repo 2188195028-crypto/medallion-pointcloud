@@ -743,9 +743,25 @@ function decimateToTarget(data, target) {
 //         totalArea f32 | bboxSize f32×3 | scale f32(共 40 字节)
 // 后接: targets f32×count×3 | normals u8×count×3 | colors u8×count×3 | meta u8×count×4
 async function loadParticleData() {
-  const res = await fetch(config.particleDataPath);
-  if (!res.ok) throw new Error("HTTP " + res.status);
-  const buf = await res.arrayBuffer();
+  // CDN 优先(国内快),超时/失败回退同源(慢但可用)
+  let buf = null;
+  if (config.cdnBase) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const res = await fetch(config.cdnBase + config.particleDataPath, { signal: ctrl.signal });
+      if (res.ok) buf = await res.arrayBuffer();
+    } catch (e) {
+      console.warn("[showcase] CDN 加载失败,回退本地粒子数据", e.message || e);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  if (!buf) {
+    const res = await fetch(config.particleDataPath);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    buf = await res.arrayBuffer();
+  }
   const dv = new DataView(buf);
   if (dv.getUint32(0, true) !== 0x4c435450) throw new Error("粒子数据格式错误"); // "PTCL"
   const count = dv.getUint32(8, true);
