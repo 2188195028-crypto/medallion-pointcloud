@@ -69,16 +69,10 @@
     </div>
   </main>
 
-  <!-- file:// 协议检测：直接双击 index.html 时 ES 模块与模型会被浏览器
-       CORS 拦截导致页面卡在加载态，这里立即给出可操作的提示 -->
+  <!-- 双击直接打开(file://)也可用:全部静态资源走 jsDelivr CDN 绝对地址,
+       无需本地服务器。离线时 CDN 不可达,由看门狗给出错误提示。
+       如需离线开发,仍可用 start.bat 或 python tools/serve_debug.py 8137 -->
   <script>
-    if (location.protocol === "file:") {
-      document.getElementById("loading").style.display = "none";
-      var err = document.getElementById("error");
-      err.hidden = false;
-      document.getElementById("error-msg").textContent =
-        "页面需要本地服务器才能加载模型：请双击项目里的 start.bat 一键启动，或在命令行运行 python tools/serve_debug.py 8137，然后访问 http://127.0.0.1:8137/";
-    }
     // 加载看门狗：25s 内 showcase.js 未初始化(CDN 不可达/网络异常)则给出错误提示，
     // 避免 HR 打开作品集时卡在无限加载转圈
     window.__showcaseReady = false;
@@ -100,8 +94,9 @@
     try {
       await import(cdn + "showcase.js");
     } catch (e) {
-      console.warn("[showcase] CDN 模块加载失败,回退本地", e.message || e);
-      await import("./showcase.js");
+      console.warn("[showcase] CDN 模块加载失败,尝试本地", e.message || e);
+      // file:// 下相对导入会被 CORS 拦截,本地回退仅对服务器场景有意义
+      try { await import("./showcase.js"); } catch (e2) { console.error("[showcase] 本地加载也失败", e2); }
     }
   </script>
 </body>
