@@ -125,11 +125,23 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
 - `?debug=1` 输出模型矩阵(坐标系排查)
 - `?mode=glb` 临时切 GLB 采样模式
 
-## 部署(GitHub Pages)
+## 部署(GitHub Pages + jsDelivr CDN)
+**国内网络下 GitHub Pages 下载大文件极慢(实测 27-45KB/s),全部静态资源走 jsDelivr CDN:**
+
+- index.html(2.8KB)来自 Pages;showcase.js/CSS 由 index.html 引导脚本动态 import
+  jsDelivr(失败回退本地);three 模块走 importmap → jsDelivr;bin/照片走 cdnBase
+  优先(15s 超时/失败回退本地)。
+- **每次发布必须递增 tag**(jsDelivr tag URL 不可变缓存,重复 tag 会永久缓存旧内容):
 ```bash
-git add -A && git commit -m "..." && git push origin master
-# 等 2-3 分钟构建,验证 https://2188195028-crypto.github.io/medallion-pointcloud/
+git add -A && git commit -m "..."
+git tag v1.4   # 递增:v1.1 → v1.2 → v1.3 ...
+# index.html / showcase-config.js 里的 @v1.x 引用先改成新 tag
+git push origin master v1.4
+# 等 Pages 构建(~2-3 分钟),验证 https://2188195028-crypto.github.io/medallion-pointcloud/
 ```
+- 常见坑:照片 CDN 加载必须 `img.crossOrigin="anonymous"`(否则 canvas tainted,
+  getImageData 抛 SecurityError → 静默回退色板)。
+- 加载看门狗:25s 未初始化显示错误提示(避免 HR 卡转圈)。
 - HTTPS push 常超时(网络),已切 SSH:
   `git remote set-url origin git@github.com:2188195028-crypto/medallion-pointcloud.git`
 - gh 已登录(2188195028-crypto,keyring),Pages 用 master 分支根目录
