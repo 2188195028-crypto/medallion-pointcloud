@@ -91,6 +91,9 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
 - 桌面:左文右图(文字 7vw/9.5vh/32vw,模型中心 ~72% 视口,modelXFraction=0.505)
 - 竖屏(手机):文字上移(7vw/5.5vh/86vw),模型居中缩小(portraitScale 0.55,
   portraitCenterY -0.12);layoutScale 竖屏按 max(0.45,min(1.1,w/700))
+- **竖屏文字顺序(v1.6)**:#text-panel 在 portrait 媒体查询内改为 flex 纵向,
+  用 order 把 #meta(主要颜色/工艺线索)移到 #body-wrap(正文/四季山水)上方,
+  避免被模型遮挡。桌面端不受影响(order 只在竖屏生效)。
 - 触屏设备:关 Bloom、DPR≤1.5
 
 ## 更新模型的完整流程(重要!)
@@ -194,3 +197,7 @@ git tag v1.6 && git push origin v1.6 && git push origin master
 - v1.2:CDN 加速(bin 走 jsDelivr,15s 超时回退本地)
 - v1.3:three 模块 + 主模块走 CDN;修复照片跨域污染(crossOrigin);看门狗
 - v1.4:看门狗 25s→45s(防冷缓存误报)+ 模块加载自动重试;file:// 双击直开
+- v1.5(标签):移除右下角"重启"按钮(index.html 删 button,showcase.js 删监听)
+- v1.6(仅 CSS,无 tag):竖屏 order 重排——主要颜色/工艺线索移到正文上方。
+  **注意:showcase.css 走 Pages 直出,只改 CSS 不需要递增 tag**(仅改
+  index.html/showcase-config.js/showcase.js 等 CDN 引用资源才需 tag)
