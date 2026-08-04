@@ -29,7 +29,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = r"D:\BaiduNetdiskDownload\天空之城素材包\资产\幻想欧式天空建筑\第四次.glb"
 OUT = os.path.join(ROOT, "assets", "particles.bin")
 
-N_PARTICLES = 180000
+N_PARTICLES = 90000
 DETAIL_RATIO = 0.15
 MODEL_ROTATION_Y = -np.pi / 2  # 与 showcase-config.js modelRotation 一致
 

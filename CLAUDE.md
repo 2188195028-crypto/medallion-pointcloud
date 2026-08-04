@@ -14,20 +14,22 @@
 ## 展示流程(用户最终确认的交互逻辑)
 1. 进入页面:粒子自动缓缓升起成形(入场动画 ~2.2s)
 2. 平时:模型保持旋转、成形展示不变(无计时、无自动循环)
-3. 滚轮滚一下 / 手指滑一下(>80px/60px 位移):粒子渐进消散(~2s,落地)
-4. 反方向滚 / 反向滑:粒子缓慢回升
-5. 点击/轻触:不触发任何效果(防误触)
-6. 页面切走/关闭:消散;回到页面:重新升起
-7. 重启按钮:重新升起
+3. **鼠标/触摸拖拽:模型左右旋转(按住暂停自转,松手 4s 无操作后从当前角度恢复自转)**
+4. 滚轮滚一下 / 手指滑一下(>80px/60px 位移):粒子渐进消散(~2s,落地)
+5. 反方向滚 / 反向滑:粒子缓慢回升
+6. 点击/轻触:不触发任何效果(防误触)
+7. 页面切走/关闭:消散;回到页面:重新升起
+8. 重启按钮:重新升起
 
 ## 文件结构
 - index.html — 页面骨架(文字区/底部栏/loading/error/file:// 检测)
 - showcase.css — 深色展览主题 + 竖屏(手机)媒体查询
 - showcase.js — 全部逻辑(着色器/粒子/流程控制/交互)
 - showcase-config.js — 所有文案/颜色/模型/时间参数(改内容先改这里)
-- assets/particles.bin — 18 万粒子预采样数据(3.96MB,data 模式加载)
+- assets/particles.bin — 18 万粒子预采样数据(3.96MB,data 模式加载;渲染前在浏览器端均匀抽取到 6 万)
 - assets/three/ — 本地 three.js r184 全套(离线可用)
 - assets/models/prosperity.glb — GLB 副本(111MB+,**不入库**,仅本地)
+- assets/reference.jpg — 参考照片(232KB,**入库**,粒子取色源,必须随仓库部署)
 - tools/serve_debug.py — 本地服务器 + /shot /diag 调试接口
 - tools/prepare_particles.py — GLB → particles.bin 预采样脚本
 - tools/verify.js — 多视口浏览器回归验证(Playwright)
@@ -38,8 +40,27 @@
 ## 核心机制
 
 ### 双模式加载(config.mode)
-- mode="data"(默认):fetch particles.bin → 解码 → 直接渲染。快(本地 0.9s)。
-- mode="glb":浏览器内加载 GLB 并采样(开发用)。URL 加 ?mode=glb 可临时切换。
+- mode="data"(默认):fetch particles.bin → 解码 → **均匀抽取到 config.particleCount(6万)**
+  → 渲染。快(本地 0.9s)。bin 头部 count 校验用 config.binParticleCount(18万)。
+- mode="glb":浏览器内加载 GLB 并采样(开发用,直接采 config.particleCount)。
+  URL 加 ?mode=glb 可临时切换。
+
+### 粒子精简与取色(showcase.js)
+- `decimateToTarget()`:部分 Fisher-Yates 无放回抽取,保持 8 个属性数组对齐,
+  表面/细节(85/15)比例统计不变。
+- **照片取色(默认)**:`applyPhotoColors()` 按粒子盘面坐标 (x,y) 采样
+  assets/reference.jpg(照片圆盘几何硬编码在 config.photoCenter/photoRadius,
+  实测:1290×1315 图,圆心 (640,630),半径 ~545,正圆)。原因:模型贴图缺失
+  照片的蓝色域(照片左侧黛蓝雪山/右上朱红秋山,模型贴图对应区域是绿/金),
+  任何色板重映射都补不出蓝色,必须直接取照片像素。
+- 照片加载失败时回退 `remapColorsToPalette()`(config.paletteRemap 13 色)。
+- 照片需随仓库入库(GitHub Pages 部署时必须包含 assets/reference.jpg)。
+
+### 拖拽旋转(showcase.js 的 dragRot)
+- pointerdown 按下 → pointermove 累计 angle(dx × 0.006) → 按住时暂停自转
+  (rotTotal 冻结,仅 dragRot.angle 生效)→ 松手 4s(ROT_IDLE_RESUME_MS)无操作
+  把 angle 并入 rotTotal 恢复自转。
+- 与滚轮/滑动手势正交,互不影响;点击(位移≈0)不旋转。
 
 ### 粒子数据格式(particles.bin,与 prepare_particles.py 严格对应)
 ```
@@ -90,7 +111,8 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
    - `node tools/verify.js`(多视口布局回归,~3 分钟)
    - 交互流程:进入升起→稳定→滚轮消散→反向回升(对比像素分布)
 3. 控制台零错误(pageerror 监听)
-4. 粒子数 = 180000(console 日志"实际粒子数量")
+4. 粒子数 = 90000(console 日志"实际粒子数量";bin 校验 = 180000;
+   6万偏稀,9万饱满且不杂乱,18万过密)
 5. 视觉抽查:用 ai-router 的 Kimi 视觉模型看截图(Read 图片经常显示失败,
    用 mcp__ai-router__ai_router_chat 传图片路径)
 6. 手机:Playwright isMobile+hasTouch 视口 390×844,长按/滑动/布局检查
@@ -118,6 +140,8 @@ git add -A && git commit -m "..." && git push origin master
 2. `#palette/#tags` ul 初始 opacity:0,淡入目标必须是 ul 本身(不是外层 wrap)
 3. canvas.toBlob 在 WebGL preserveDrawingBuffer=false 时,rAF 外抓取全黑
 4. 归一化坐标系:必须顺序变换(居中→rotY(-π/2)→缩放),用 Minv 会放大 1.4×
+4.5. 帧循环里"拖拽暂停自转"时,必须删除原 `rotTotal += dt * rotationSpeed`
+     行(只留条件推进那一处),否则暂停失效且转速翻倍(实测踩过)
 5. 无 UV 模型必须 planar 投影兜底,否则全部粒子 fallback 米白
 6. 2560 宽屏正文 40em max-width 会限制行宽导致异常换行(已删)
 7. 手机"点击"带几像素抖动,触摸触发必须用手势总位移判定(>60px)

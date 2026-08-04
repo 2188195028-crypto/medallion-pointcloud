@@ -328,6 +328,52 @@ window.addEventListener("touchend", () => {
   touchStartY = null;
 });
 
+// ---------- 鼠标/触摸拖拽旋转(左右展示) ----------
+// 拖拽时暂停自动旋转,角度由用户控制;松手后保持该角度,
+// 超过 ROT_IDLE_RESUME_MS 无操作再从当前角度恢复自动旋转。
+// 与滚轮/滑动"消散/升起"手势互不冲突(方向正交,位移各自独立判定)。
+const dragRot = {
+  active: false,
+  pointerId: null,
+  lastX: 0,
+  angle: 0, // 用户拖拽累计角度(叠加在自动旋转基准之上)
+  resumeTimer: null,
+};
+const ROT_DRAG_K = 0.006; // 每像素旋转弧度(灵敏度)
+const ROT_IDLE_RESUME_MS = 4000;
+
+canvas.style.cursor = "grab";
+canvas.addEventListener("pointerdown", (e) => {
+  if (dragRot.active) return;
+  dragRot.active = true;
+  dragRot.pointerId = e.pointerId;
+  dragRot.lastX = e.clientX;
+  clearTimeout(dragRot.resumeTimer); // 拖拽中不恢复自动旋转
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+  canvas.style.cursor = "grabbing";
+});
+window.addEventListener("pointermove", (e) => {
+  if (!dragRot.active || e.pointerId !== dragRot.pointerId) return;
+  const dx = e.clientX - dragRot.lastX;
+  dragRot.lastX = e.clientX;
+  dragRot.angle += dx * ROT_DRAG_K;
+});
+const endDragRot = (e) => {
+  if (!dragRot.active || e.pointerId !== dragRot.pointerId) return;
+  dragRot.active = false;
+  dragRot.pointerId = null;
+  try { canvas.releasePointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+  canvas.style.cursor = "grab";
+  clearTimeout(dragRot.resumeTimer);
+  dragRot.resumeTimer = setTimeout(() => {
+    // 用户角度并入自动旋转基准,从当前朝向平滑续转
+    rotTotal += dragRot.angle;
+    dragRot.angle = 0;
+  }, ROT_IDLE_RESUME_MS);
+};
+window.addEventListener("pointerup", endDragRot);
+window.addEventListener("pointercancel", endDragRot);
+
 // 页面切走/关闭 → 消散;回到页面 → 慢速重新升起(入场动画)
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
@@ -615,9 +661,11 @@ const T_START = performance.now(); // 页面脚本启动时刻(测量加载耗�
 // mode="glb" ：浏览器内加载 GLB 并采样(开发/验证用)
 // URL 参数 ?mode=glb 可临时覆盖(调试坐标系用)
 const MODE = new URLSearchParams(location.search).get("mode") || config.mode;
+// 参考照片取色与粒子数据并行加载
+const photoReady = loadPhotoTexture();
 if (MODE === "data") {
-  loadParticleData()
-    .then((d) => {
+  Promise.all([loadParticleData(), photoReady])
+    .then(([d]) => {
       bboxSize = d.stats.bboxSize;
       buildPoints(d, {
         meshCount: d.stats.meshCount,
@@ -636,15 +684,57 @@ if (MODE === "data") {
   loader.load(
     config.modelPath,
     (gltf) => {
-      try {
-        buildShowcase(gltf.scene || gltf.scenes[0]);
-      } catch (e) {
-        showError("点云采样失败：" + e.message);
-      }
+      photoReady.then(() => {
+        try {
+          buildShowcase(gltf.scene || gltf.scenes[0]);
+        } catch (e) {
+          showError("点云采样失败：" + e.message);
+        }
+      });
     },
     undefined,
     (err) => showError("模型加载失败，请检查 assets/models/prosperity.glb 是否存在。（" + (err && err.message ? err.message : "网络错误") + "）")
   );
+}
+
+// ---------- 粒子精简(无放回均匀抽取) ----------
+// bin 内 18 万粒子在浏览器端抽取到 config.particleCount(6 万),
+// 保持表面/细节比例统计一致,视觉密度足够但不杂乱。
+// 部分 Fisher-Yates 洗牌:前 target 个位置由随机抽取填充,随后截断。
+function decimateToTarget(data, target) {
+  const n = data.targets.length / 3;
+  if (n <= target) return data;
+  const swap3 = (arr, a, b) => {
+    if (a === b) return;
+    const oa = a * 3, ob = b * 3;
+    for (let q = 0; q < 3; q++) {
+      const t = arr[oa + q]; arr[oa + q] = arr[ob + q]; arr[ob + q] = t;
+    }
+  };
+  const swap1 = (arr, a, b) => {
+    if (a === b) return;
+    const t = arr[a]; arr[a] = arr[b]; arr[b] = t;
+  };
+  for (let k = 0; k < target; k++) {
+    const j = k + Math.floor(Math.random() * (n - k));
+    swap3(data.targets, k, j);
+    swap3(data.starts, k, j);
+    swap3(data.normals, k, j);
+    swap3(data.colors, k, j);
+    swap1(data.seeds, k, j);
+    swap1(data.delays, k, j);
+    swap1(data.edges, k, j);
+    swap1(data.sizes, k, j);
+  }
+  data.targets = data.targets.slice(0, target * 3);
+  data.starts = data.starts.slice(0, target * 3);
+  data.normals = data.normals.slice(0, target * 3);
+  data.colors = data.colors.slice(0, target * 3);
+  data.seeds = data.seeds.slice(0, target);
+  data.delays = data.delays.slice(0, target);
+  data.edges = data.edges.slice(0, target);
+  data.sizes = data.sizes.slice(0, target);
+  return data;
 }
 
 // ---------- 预采样粒子数据模式 ----------
@@ -659,8 +749,8 @@ async function loadParticleData() {
   const dv = new DataView(buf);
   if (dv.getUint32(0, true) !== 0x4c435450) throw new Error("粒子数据格式错误"); // "PTCL"
   const count = dv.getUint32(8, true);
-  if (count !== config.particleCount) {
-    throw new Error("粒子数量不匹配: " + count + " ≠ " + config.particleCount);
+  if (count !== config.binParticleCount) {
+    throw new Error("粒子数量不匹配: " + count + " ≠ " + config.binParticleCount);
   }
   const stats = {
     meshCount: dv.getUint32(12, true),
@@ -713,7 +803,7 @@ async function loadParticleData() {
   }
 
   console.log("[showcase] 阶段计时 粒子数据加载+解码: " + (performance.now() - T_START).toFixed(0) + "ms");
-  return { targets, starts, normals, colors: colorsF, seeds, delays, edges, sizes, stats };
+  return decimateToTarget({ targets, starts, normals, colors: colorsF, seeds, delays, edges, sizes, stats }, config.particleCount);
 }
 
 function buildShowcase(model) {
@@ -783,8 +873,88 @@ function buildShowcase(model) {
   });
 }
 
+// ---------- 参考照片取色(照片即色板) ----------
+// 模型贴图与参考照片的四季布局不一致(照片左侧黛蓝雪山/右上朱红秋山,
+// 模型贴图缺失蓝色域),因此直接按粒子在盘面 (x,y) 的位置采样照片像素,
+// 保证渲染颜色布局与照片一致:中心金字/暗金回纹/右上红枫/左侧黛蓝/底部青绿。
+// 照片加载失败时回退到最近色板重映射(config.paletteRemap)。
+let photoTex = null; // { data, w, h, cx, cy, radius }
+
+function loadPhotoTexture() {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        // 保持原尺寸加载(1290×1315,圆盘几何硬编码在 config,不缩放避免坐标换算)
+        const c = document.createElement("canvas");
+        c.width = img.width;
+        c.height = img.height;
+        const ctx = c.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+        photoTex = {
+          data: ctx.getImageData(0, 0, img.width, img.height).data,
+          w: img.width,
+          h: img.height,
+          cx: config.photoCenter[0],
+          cy: config.photoCenter[1],
+          radius: config.photoRadius,
+        };
+        console.log("[showcase] 参考照片取色启用: 圆盘中心(" +
+          photoTex.cx + "," + photoTex.cy + ") 半径 " + photoTex.radius);
+      } catch (e) {
+        console.warn("[showcase] 照片取色初始化失败,回退色板重映射", e);
+      }
+      resolve();
+    };
+    img.onerror = () => resolve();
+    img.src = config.photoPath;
+  });
+}
+
+// 按盘面坐标 (x,y ∈ [-1,1]) 采样照片(模型 +y 向上 ↔ 图像 y 向下;×0.97 内缩防白边)
+function applyPhotoColors(targets, colors) {
+  const n = targets.length / 3;
+  const r = photoTex.radius * 0.97;
+  for (let k = 0; k < n; k++) {
+    const px = Math.round(photoTex.cx + targets[k * 3] * r);
+    const py = Math.round(photoTex.cy - targets[k * 3 + 1] * r);
+    const x = Math.min(photoTex.w - 1, Math.max(0, px));
+    const y = Math.min(photoTex.h - 1, Math.max(0, py));
+    const o = (y * photoTex.w + x) * 4;
+    colors[k * 3] = photoTex.data[o] / 255;
+    colors[k * 3 + 1] = photoTex.data[o + 1] / 255;
+    colors[k * 3 + 2] = photoTex.data[o + 2] / 255;
+  }
+}
+
+// 回退方案:最近色板重映射(config.paletteRemap,13 色,含红/蓝/绿鲜艳系)
+const paletteRgb = config.paletteRemap.map((c) => {
+  const h = parseInt(c.hex.slice(1), 16);
+  return [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
+});
+
+function remapColorsToPalette(colors) {
+  const n = colors.length / 3;
+  for (let k = 0; k < n; k++) {
+    const r = colors[k * 3], g = colors[k * 3 + 1], b = colors[k * 3 + 2];
+    let best = 0, bestD = Infinity;
+    for (let pi = 0; pi < paletteRgb.length; pi++) {
+      const dr = r - paletteRgb[pi][0];
+      const dg = g - paletteRgb[pi][1];
+      const db = b - paletteRgb[pi][2];
+      const d = dr * dr + dg * dg + db * db;
+      if (d < bestD) { bestD = d; best = pi; }
+    }
+    colors[k * 3] = paletteRgb[best][0];
+    colors[k * 3 + 1] = paletteRgb[best][1];
+    colors[k * 3 + 2] = paletteRgb[best][2];
+  }
+}
+
 // 两种模式共用的收尾：创建 BufferGeometry → 粒子 → 布局 → 启动时间线
 function buildPoints(data, stats) {
+  if (photoTex) applyPhotoColors(data.targets, data.colors); // 照片取色(优先)
+  else remapColorsToPalette(data.colors); // 回退:色板重映射
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(data.targets, 3));
   geometry.setAttribute("aStart", new THREE.BufferAttribute(data.starts, 3));
@@ -923,8 +1093,7 @@ function frame(now) {
 
   updateFlow(dt);
 
-  // 模型始终自动旋转 + 浮动;粒子相位由展示流程控制
-  rotTotal += dt * STAGE.rotationSpeed;
+  // 粒子相位由展示流程控制;模型自动旋转在下方按拖拽状态推进
   phaseTotal += dt;
   uniforms.uTime.value = phaseTotal; // 粒子闪烁/漂移动画继续
 
@@ -943,8 +1112,9 @@ function frame(now) {
     uniforms.uPhaseFade.value = 1;
   }
 
-  // 模型:始终自动旋转 + 极轻微浮动,固定在展示位
-  group.rotation.y = rotTotal;
+  // 模型:自动旋转(拖拽时暂停)+ 极轻微浮动,固定在展示位
+  if (!dragRot.active) rotTotal += dt * STAGE.rotationSpeed;
+  group.rotation.y = rotTotal + dragRot.angle;
   const baseY = IS_PORTRAIT() ? STAGE.portraitCenterY : 0; // 竖屏模型下移
   group.position.y = baseY + Math.sin(phaseTotal * 0.6) * STAGE.floatAmp;
   group.position.x = baseX;

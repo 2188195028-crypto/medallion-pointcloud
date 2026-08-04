@@ -20,11 +20,34 @@ export default {
     "冬岭积雪、冰河蜿蜒，夏亭流水、青峰叠翠。" +
     "四季流转、生生不息，寄寓国泰民安、岁岁繁荣昌盛。",
   features: ["四季山水", "回纹边框", "鎏金大字"],
+  // 色板取自参考照片(照片文件夹 fa59803c...jpg,工笔重彩浓艳风格):
+  // 金色底 + 朱红(右上秋山红枫) + 黛蓝/浅蓝(左侧雪山冰河) + 青绿/深绿(底部夏景) + 米白(留白积雪)。
+  // palette:页面"主要颜色"列表(8 个代表色)。
+  // paletteRemap:粒子颜色重映射全色板(13 色,showcase.js 使用,含明暗层次)。
   palette: [
-    { name: "鎏金色", hex: "#DCA852" },
-    { name: "朱红色", hex: "#C3272B" },
-    { name: "青绿色", hex: "#3E7C68" },
-    { name: "黛蓝色", hex: "#2F4858" },
+    { name: "鎏金", hex: "#E5A91F" },
+    { name: "米金", hex: "#DCC89E" },
+    { name: "朱红", hex: "#C0392B" },
+    { name: "黛蓝", hex: "#2E4057" },
+    { name: "浅蓝", hex: "#8FBCD4" },
+    { name: "青绿", hex: "#8FA876" },
+    { name: "赭石", hex: "#E67E22" },
+    { name: "米白", hex: "#F5F0E1" },
+  ],
+  paletteRemap: [
+    { name: "亮金", hex: "#E5A91F" },
+    { name: "暗金", hex: "#C9A44E" },
+    { name: "米金", hex: "#DCC89E" },
+    { name: "朱红", hex: "#C0392B" },
+    { name: "橙红", hex: "#D35400" },
+    { name: "深红", hex: "#8E2A1E" },
+    { name: "赭石", hex: "#E67E22" },
+    { name: "棕褐", hex: "#8B5A2B" },
+    { name: "黛蓝", hex: "#2E4057" },
+    { name: "浅蓝", hex: "#8FBCD4" },
+    { name: "青绿", hex: "#8FA876" },
+    { name: "深绿", hex: "#314A2F" },
+    { name: "米白", hex: "#F5F0E1" },
   ],
   craftTags: ["描金", "回纹", "工笔", "重彩"],
 
@@ -34,6 +57,14 @@ export default {
   mode: "data",
   particleDataPath: "assets/particles.bin",
   modelPath: "assets/models/prosperity.glb",
+  // 参考照片(粒子取色源):模型贴图与照片四季布局不一致(照片左侧为黛蓝雪山、
+  // 右上为朱红秋山,模型贴图缺失这些色域),按粒子盘面位置采样照片像素,
+  // 保证渲染颜色布局与照片一致。照片 232KB,需随仓库入库(GitHub Pages)。
+  photoPath: "assets/reference.jpg",
+  // 照片圆盘几何(实测校准:照片 1290×1315,圆盘为正圆,中心 (640,630),半径 ~545;
+  // 视觉模型定位 + 72 方向边界扫描交叉验证,采样时 ×0.97 内缩防采到白边)
+  photoCenter: [640, 630],
+  photoRadius: 540,
   // 新模型为薄圆盘、面朝 ±X。绕 Y 旋转 ±90° 把盘面转到 +Z 面向相机。
   // 初始取 -90°，浏览器截图验证正反面与上下方向后微调（可换 +π/2）。
   modelRotation: [0, -Math.PI / 2, 0],
@@ -50,7 +81,8 @@ export default {
 
   // ---- 时间线与粒子 ----
   duration: 10, // 秒，固定
-  particleCount: 180000, // 固定
+  binParticleCount: 90000, // particles.bin 粒子数(与渲染数一致,加载校验用)
+  particleCount: 90000, // 实际渲染粒子数(加载后均匀无放回抽取;6万偏稀,9万饱满且不杂乱)
   detailSamplingRatio: 0.15,
 
   // ---- 分辨率基准（1280×720）----
