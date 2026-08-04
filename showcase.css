@@ -382,7 +382,13 @@ body {
     left: 7vw;
     top: 5.5vh;
     width: 86vw;
+    /* 手机端改为纵向 flex, 用 order 把"主要颜色/工艺线索"移到正文(四季山水)上方 */
+    display: flex;
+    flex-direction: column;
   }
+  #meta { order: 1; }
+  #body-wrap { order: 2; }
+  #features { order: 3; }
   #body-wrap {
     max-width: none;
   }
