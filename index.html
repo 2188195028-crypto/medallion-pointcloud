@@ -10,8 +10,8 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.3/assets/three/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.3/assets/three/"
+      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.4/assets/three/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.4/assets/three/"
     }
   }
   </script>
@@ -73,8 +73,9 @@
        无需本地服务器。离线时 CDN 不可达,由看门狗给出错误提示。
        如需离线开发,仍可用 start.bat 或 python tools/serve_debug.py 8137 -->
   <script>
-    // 加载看门狗：25s 内 showcase.js 未初始化(CDN 不可达/网络异常)则给出错误提示，
-    // 避免 HR 打开作品集时卡在无限加载转圈
+    // 加载看门狗:45s 内 showcase.js 未初始化(CDN 不可达/网络异常)才提示。
+    // 45s 覆盖冷缓存场景(实测 jsDelivr 冷缓存 ~21s + 模块解析 ~7s ≈ 28s,
+    // 25s 会误报;预热后第二次打开 ~10s)
     window.__showcaseReady = false;
     setTimeout(function () {
       if (!window.__showcaseReady) {
@@ -82,19 +83,27 @@
         var err = document.getElementById("error");
         err.hidden = false;
         document.getElementById("error-msg").textContent =
-          "3D 资源加载超时，请检查网络后刷新重试。(jsDelivr CDN 不可达时会自动回退，稍等片刻即可)";
+          "页面加载较慢或网络异常，请稍候点击重新加载重试。首次加载需从 CDN 获取资源（约 10-30 秒），之后会快很多。";
       }
-    }, 25000);
+    }, 45000);
   </script>
 
-  <!-- 引导:主模块 CDN 优先(国内快),失败回退本地(GitHub Pages)。
+  <!-- 引导:主模块 CDN 优先(国内快),失败自动重试一次再回退本地。
        showcase.js 内相对导入 ./showcase-config.js 跟随模块来源自动切换 -->
   <script type="module">
-    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.3/";
-    try {
-      await import(cdn + "showcase.js");
-    } catch (e) {
-      console.warn("[showcase] CDN 模块加载失败,尝试本地", e.message || e);
+    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.4/";
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let ok = false;
+    for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+      try {
+        await import(cdn + "showcase.js");
+        ok = true;
+      } catch (e) {
+        console.warn("[showcase] CDN 模块加载失败(第" + (attempt + 1) + "次),重试", e.message || e);
+        if (attempt === 0) await sleep(1500);
+      }
+    }
+    if (!ok) {
       // file:// 下相对导入会被 CORS 拦截,本地回退仅对服务器场景有意义
       try { await import("./showcase.js"); } catch (e2) { console.error("[showcase] 本地加载也失败", e2); }
     }
