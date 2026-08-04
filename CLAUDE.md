@@ -7,8 +7,10 @@
 圆盘器物(中心"繁荣昌盛"金字 + 四季山水),模型持续自动旋转。
 
 - 线上地址(GitHub Pages):https://2188195028-crypto.github.io/medallion-pointcloud/
-- 本地运行:`python tools/serve_debug.py 8137` → http://127.0.0.1:8137/
-- 本地一键启动:双击 `start.bat`
+- **双击 index.html 直接可用(file://)**:全部静态资源走 jsDelivr CDN 绝对地址,
+  无需本地服务器(2026-08-04 v1.4 起)。离线开发仍可用
+  `python tools/serve_debug.py 8137` 或双击 `start.bat`
+- 加载时长:CDN 热缓存 ~10s(冷缓存首次 ~28s,看门狗 45s 覆盖)
 - 仓库:github.com/2188195028-crypto/medallion-pointcloud(分支 master,SSH push)
 
 ## 展示流程(用户最终确认的交互逻辑)
@@ -22,11 +24,11 @@
 8. 重启按钮:重新升起
 
 ## 文件结构
-- index.html — 页面骨架(文字区/底部栏/loading/error/file:// 检测)
+- index.html — 页面骨架(文字区/底部栏/loading/error/importmap + CDN 引导脚本 + 45s 加载看门狗)
 - showcase.css — 深色展览主题 + 竖屏(手机)媒体查询
 - showcase.js — 全部逻辑(着色器/粒子/流程控制/交互)
 - showcase-config.js — 所有文案/颜色/模型/时间参数(改内容先改这里)
-- assets/particles.bin — 18 万粒子预采样数据(3.96MB,data 模式加载;渲染前在浏览器端均匀抽取到 6 万)
+- assets/particles.bin — 9 万粒子预采样数据(1.98MB,data 模式加载;与渲染数一致,无需抽取)
 - assets/three/ — 本地 three.js r184 全套(离线可用)
 - assets/models/prosperity.glb — GLB 副本(111MB+,**不入库**,仅本地)
 - assets/reference.jpg — 参考照片(232KB,**入库**,粒子取色源,必须随仓库部署)
@@ -40,14 +42,17 @@
 ## 核心机制
 
 ### 双模式加载(config.mode)
-- mode="data"(默认):fetch particles.bin → 解码 → **均匀抽取到 config.particleCount(6万)**
-  → 渲染。快(本地 0.9s)。bin 头部 count 校验用 config.binParticleCount(18万)。
+- mode="data"(默认):fetch particles.bin(CDN 优先,15s 超时回退本地) → 解码
+  → 渲染。bin 与渲染数一致(9 万),`decimateToTarget()` 为 no-op(保留兼容)。
+  bin 头部 count 校验用 config.binParticleCount。
 - mode="glb":浏览器内加载 GLB 并采样(开发用,直接采 config.particleCount)。
-  URL 加 ?mode=glb 可临时切换。
+  URL 加 ?mode=glb 可临时切换。**GLTF/DRACO 加载器是动态 import 的,仅在
+  glb 模式加载**(省 ~400KB 解析,data 模式主路径不加载)。
 
 ### 粒子精简与取色(showcase.js)
-- `decimateToTarget()`:部分 Fisher-Yates 无放回抽取,保持 8 个属性数组对齐,
-  表面/细节(85/15)比例统计不变。
+- `decimateToTarget()`:部分 Fisher-Yates 无放回抽取(18万→6万时期遗留;
+  现 bin 即 9 万,调用为 no-op)。若未来 bin 大于渲染数,可改 config 复用。
+- 粒子数量经验:6万偏稀(覆盖 13.2%),9万饱满不杂乱(16.9%),18万过密。
 - **照片取色(默认)**:`applyPhotoColors()` 按粒子盘面坐标 (x,y) 采样
   assets/reference.jpg(照片圆盘几何硬编码在 config.photoCenter/photoRadius,
   实测:1290×1315 图,圆心 (640,630),半径 ~545,正圆)。原因:模型贴图缺失
@@ -90,12 +95,11 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
 
 ## 更新模型的完整流程(重要!)
 1. 用户把新 GLB 放到 D:\BaiduNetdiskDownload\天空之城素材包\资产\幻想欧式天空建筑\
-2. 修改 tools/prepare_particles.py 的 SRC 指向新文件
-3. 运行 `python tools/prepare_particles.py`(生成新 assets/particles.bin)
-4. 检查输出:粒子数=180000、归一化坐标约 ±1(注意 bbox 尺寸变化)
+2. 修改 tools/prepare_particles.py 的 SRC 指向新文件(N_PARTICLES 保持 90000)
+3. 运行 `python tools/prepare_particles.py`(生成新 assets/particles.bin,~2MB)
+4. 检查输出:粒子数=90000、归一化坐标约 ±1(注意 bbox 尺寸变化)
 5. 浏览器验证(见下),必要时调整 config 的 modelRotation/stage
-6. `git add -A && git commit && git push`(SSH remote),等 Pages 构建 ~2-3 分钟
-7. 线上验证
+6. 按"部署"流程发布(commit → tag → push → 预热 CDN → 线上验证)
 
 ### 模型已知问题
 - 第三/四次 GLB 导出**丢失了主 mesh 的 UV**(只有 POSITION/NORMAL)!
@@ -111,11 +115,12 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
    - `node tools/verify.js`(多视口布局回归,~3 分钟)
    - 交互流程:进入升起→稳定→滚轮消散→反向回升(对比像素分布)
 3. 控制台零错误(pageerror 监听)
-4. 粒子数 = 90000(console 日志"实际粒子数量";bin 校验 = 180000;
-   6万偏稀,9万饱满且不杂乱,18万过密)
+4. 粒子数 = 90000(console 日志"实际粒子数量";bin 校验 = 90000)
 5. 视觉抽查:用 ai-router 的 Kimi 视觉模型看截图(Read 图片经常显示失败,
    用 mcp__ai-router__ai_router_chat 传图片路径)
 6. 手机:Playwright isMobile+hasTouch 视口 390×844,长按/滑动/布局检查
+7. file:// 双击本地 index.html(无需服务器),~10s 内"实际粒子数量"出现
+8. 线上加载 <15s(CDN 热缓存),控制台无 "CDN 加载失败" 警告
 
 ## 调试工具
 - `?t=5.2` 冻结相位(按原时间线映射,截图验证用)
@@ -131,17 +136,25 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
 - index.html(2.8KB)来自 Pages;showcase.js/CSS 由 index.html 引导脚本动态 import
   jsDelivr(失败回退本地);three 模块走 importmap → jsDelivr;bin/照片走 cdnBase
   优先(15s 超时/失败回退本地)。
-- **每次发布必须递增 tag**(jsDelivr tag URL 不可变缓存,重复 tag 会永久缓存旧内容):
+- **每次发布必须递增 tag**(jsDelivr tag URL 不可变缓存,重复 tag 会永久缓存旧内容)。
+  **发布顺序(重要,顺序错了页面会挂):**
 ```bash
+# 1. 先改 index.html / showcase-config.js 里的 @v1.x 引用为新 tag(v1.5 → v1.6 …)
+# 2. commit(此时本地页面引用的 tag 尚不存在,属正常)
 git add -A && git commit -m "..."
-git tag v1.4   # 递增:v1.1 → v1.2 → v1.3 ...
-# index.html / showcase-config.js 里的 @v1.x 引用先改成新 tag
-git push origin master v1.4
-# 等 Pages 构建(~2-3 分钟),验证 https://2188195028-crypto.github.io/medallion-pointcloud/
+# 3. 打 tag 并推送:先 push tag,再 push master
+git tag v1.6 && git push origin v1.6 && git push origin master
+# 4. 立即预热 jsDelivr(否则用户首次打开撞冷缓存 ~21s+解析 7s ≈ 28s):
+#    curl 拉一遍所有 @v1.6 URL(showcase.js/config/bin/照片/three 全部模块),
+#    并发预热可能被限流返回 404,404 的串行重试即可
+# 5. 等 Pages 构建(~2-3 分钟),验证线上 + 本地 file:// 双击
 ```
 - 常见坑:照片 CDN 加载必须 `img.crossOrigin="anonymous"`(否则 canvas tainted,
   getImageData 抛 SecurityError → 静默回退色板)。
-- 加载看门狗:25s 未初始化显示错误提示(避免 HR 卡转圈)。
+- 加载看门狗:45s 未初始化显示错误提示(避免 HR 卡转圈;25s 会误报——
+  冷缓存 21s+解析 7s ≈ 28s)。
+- **备用 CDN 实测不可达**(此网络):fastly/gcore/testingcf.jsdelivr.net、
+  statically.io 全部超时,只有 cdn.jsdelivr.net 通。改 CDN 前先 curl 验证。
 - HTTPS push 常超时(网络),已切 SSH:
   `git remote set-url origin git@github.com:2188195028-crypto/medallion-pointcloud.git`
 - gh 已登录(2188195028-crypto,keyring),Pages 用 master 分支根目录
@@ -158,7 +171,16 @@ git push origin master v1.4
 6. 2560 宽屏正文 40em max-width 会限制行宽导致异常换行(已删)
 7. 手机"点击"带几像素抖动,触摸触发必须用手势总位移判定(>60px)
 8. 入场/消散缓动太快要区分:入场 0.45/s 慢速可见,消散 0.5/s 渐进
-9. file:// 双击打开:模块被 CORS 拦截,页面加内联脚本检测并提示用 start.bat
+9. file:// 双击打开:资源全走 CDN 后可直开;但本地相对路径回退
+   (./showcase.js)在 file:// 下会被 CORS 拦截,该回退仅服务器场景有效。
+   离线时 file:// 无法加载(看门狗 45s 提示)
+10. 看门狗 25s 误报事故:jsDelivr 冷缓存 ~21s + 模块解析 ~7s ≈ 28s 超过 25s,
+    页面正常加载却被判"超时"。教训:冷缓存场景给足余量(45s),发布后必预热
+11. jsDelivr tag 未推送前页面必挂:本地引用 @v1.x 而 tag 不存在 → 模块 404。
+    发布顺序必须是 commit → tag → push tag → push master → 预热
+12. 分析参考照片颜色时,PIL 量化被大面积低饱和底色骗了(误判"象牙白+金")。
+    真实是浓艳工笔重彩(右上朱红/左侧黛蓝)。教训:量化 + 视觉模型 + 空间分布
+    三路交叉验证;色相取模公式有边缘 bug(蓝紫被算成品红),通道比较法更可靠
 
 ## 文案/参数修改入口(showcase-config.js)
 - 文案:categoryEn/titleZh/aliasEn/introZh/introSubZh/bodyZh/features/palette/craftTags
@@ -168,3 +190,7 @@ git push origin master v1.4
 
 ## 版本
 - v1.0-interactive(标签):进入升起/平时旋转/滚轮滑动渐进消散/手机适配
+- v1.1:颜色按参考照片取色(照片即色板,几何硬编码)+ 粒子精简 9 万 + 拖拽旋转
+- v1.2:CDN 加速(bin 走 jsDelivr,15s 超时回退本地)
+- v1.3:three 模块 + 主模块走 CDN;修复照片跨域污染(crossOrigin);看门狗
+- v1.4:看门狗 25s→45s(防冷缓存误报)+ 模块加载自动重试;file:// 双击直开
