@@ -743,11 +743,12 @@ function decimateToTarget(data, target) {
 //         totalArea f32 | bboxSize f32×3 | scale f32(共 40 字节)
 // 后接: targets f32×count×3 | normals u8×count×3 | colors u8×count×3 | meta u8×count×4
 async function loadParticleData() {
-  // CDN 优先(国内快),超时/失败回退同源(慢但可用)
+  // CDN 优先(国内快,热缓存 ~2s),超时/失败回退同源(慢但可用)。
+  // 15s 容忍 jsDelivr 推新 commit 后的冷缓存回源(实测冷缓存 ~6s)。
   let buf = null;
   if (config.cdnBase) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const timer = setTimeout(() => ctrl.abort(), 15000);
     try {
       const res = await fetch(config.cdnBase + config.particleDataPath, { signal: ctrl.signal });
       if (res.ok) buf = await res.arrayBuffer();
