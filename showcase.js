@@ -6,8 +6,7 @@
    作者：Ligong-Wenchang  日期：2026-08-03
    ============================================================ */
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+// GLTF/DRACO 加载器仅 GLB 模式使用,动态 import 节省 ~400KB 解析(data 模式主路径)
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
@@ -676,25 +675,29 @@ if (MODE === "data") {
     })
     .catch((e) => showError("粒子数据加载失败：" + e.message));
 } else {
-  const loader = new GLTFLoader();
-  // 检查并配置 Draco（模型未压缩时不会触发解码器下载）
-  const draco = new DRACOLoader().setDecoderPath("assets/three/libs/draco/");
-  loader.setDRACOLoader(draco);
-
-  loader.load(
-    config.modelPath,
-    (gltf) => {
-      photoReady.then(() => {
+  // GLB 模式:动态加载加载器(不拖累 data 模式主路径)
+  Promise.all([
+    import("three/addons/loaders/GLTFLoader.js"),
+    import("three/addons/loaders/DRACOLoader.js"),
+    photoReady,
+  ]).then(([gltfMod, dracoMod]) => {
+    const loader = new gltfMod.GLTFLoader();
+    // 检查并配置 Draco（模型未压缩时不会触发解码器下载）
+    const draco = new dracoMod.DRACOLoader().setDecoderPath("assets/three/libs/draco/");
+    loader.setDRACOLoader(draco);
+    loader.load(
+      config.modelPath,
+      (gltf) => {
         try {
           buildShowcase(gltf.scene || gltf.scenes[0]);
         } catch (e) {
           showError("点云采样失败：" + e.message);
         }
-      });
-    },
-    undefined,
-    (err) => showError("模型加载失败，请检查 assets/models/prosperity.glb 是否存在。（" + (err && err.message ? err.message : "网络错误") + "）")
-  );
+      },
+      undefined,
+      (err) => showError("模型加载失败，请检查 assets/models/prosperity.glb 是否存在。（" + (err && err.message ? err.message : "网络错误") + "）")
+    );
+  }).catch((e) => showError("3D 加载器初始化失败：" + e.message));
 }
 
 // ---------- 粒子精简(无放回均匀抽取) ----------
