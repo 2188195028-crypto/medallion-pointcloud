@@ -60,7 +60,7 @@ export default {
   // 粒子数据 CDN 镜像:GitHub Pages 在国内网络下载 bin 极慢(实测 27-45KB/s,
   // 1.98MB 需 70s+),jsDelivr 国内节点 ~2s。15s 超时失败自动回退本地。
   // 用版本 tag(v1.1)而非 @master:不可变 URL 缓存永久生效,推送新 commit 不失效。
-  cdnBase: "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.4/",
+  cdnBase: "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.5/",
   // 参考照片(粒子取色源):模型贴图与照片四季布局不一致(照片左侧为黛蓝雪山、
   // 右上为朱红秋山,模型贴图缺失这些色域),按粒子盘面位置采样照片像素,
   // 保证渲染颜色布局与照片一致。照片 232KB,需随仓库入库(GitHub Pages)。

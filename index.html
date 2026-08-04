@@ -10,8 +10,8 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.4/assets/three/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.4/assets/three/"
+      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.5/assets/three/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.5/assets/three/"
     }
   }
   </script>
@@ -51,10 +51,9 @@
       </div>
     </section>
 
-    <!-- 底部界面(去掉计时进度条,仅保留编号与重启) -->
+    <!-- 底部界面(仅保留编号) -->
     <footer id="bottom-bar">
       <span id="counter">01 / 01</span>
-      <button id="restart" type="button" aria-label="粒子回到散开状态">重启</button>
     </footer>
 
     <!-- 加载状态 -->
@@ -91,7 +90,7 @@
   <!-- 引导:主模块 CDN 优先(国内快),失败自动重试一次再回退本地。
        showcase.js 内相对导入 ./showcase-config.js 跟随模块来源自动切换 -->
   <script type="module">
-    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.4/";
+    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.5/";
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let ok = false;
     for (let attempt = 0; attempt < 2 && !ok; attempt++) {

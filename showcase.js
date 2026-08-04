@@ -60,7 +60,6 @@ const cursorEl = document.getElementById("cursor");
 const featuresEl = document.getElementById("features");
 const paletteEl = document.getElementById("palette");
 const tagsEl = document.getElementById("tags");
-const restartBtn = document.getElementById("restart");
 const loadingEl = document.getElementById("loading");
 const errorEl = document.getElementById("error");
 const errorMsg = document.getElementById("error-msg");
@@ -1156,10 +1155,6 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-restartBtn.addEventListener("click", () => {
-  // 重新升起(慢速入场动画;模型继续旋转)
-  setPhase(1, 0.45);
-});
 document.getElementById("reload").addEventListener("click", () => location.reload());
 
 // 页面卸载时释放 GPU 资源（Geometry / Material / RenderTarget / 纹理）
