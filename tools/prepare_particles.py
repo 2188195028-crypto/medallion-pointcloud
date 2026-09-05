@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""prepare_particles.py — 把 GLB 预采样为 18 万粒子数据文件(particles.bin)
+"""prepare_particles.py — 把 GLB 预采样为 9 万粒子数据文件(particles.bin)
 
 与 showcase.js 的浏览器内采样算法完全一致:
 - 面积加权均匀采样(85%)+ 高曲率/轮廓细节采样(15%,免 acos 权重)
 - UV 从基础色贴图取色(glTF v=0 顶部约定),回退材质色/主题色
 - 世界坐标 → 模型局部空间(归一化 scale=2/max + 居中 + modelRotation Y-90°)
-输出二进制(约 4MB):
+输出二进制(约 2MB):
   header : magic "PTCL" u32 | version u32 | count u32
            meshCount u32 | triCount u32 | totalArea f32
            bboxSize f32×3 | scale f32

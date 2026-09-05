@@ -48,8 +48,26 @@
           <span class="meta-label">工艺线索</span>
           <ul id="tags" aria-label="工艺线索"></ul>
         </div>
+        <!-- 落地实景:店面前后对比照片缩略图(点击看大图,showcase.js 注入) -->
+        <div id="realwall-wrap" class="meta-block">
+          <span class="meta-label">落地实景</span>
+          <div id="realwall-thumbs"></div>
+        </div>
       </div>
     </section>
+
+    <!-- 落地实景大图查看器(默认隐藏,缩略图点击打开;Esc/背景/关闭钮均可关闭) -->
+    <div id="realwall-overlay" hidden role="dialog" aria-modal="true" aria-label="落地实景照片">
+      <button id="realwall-close" type="button" aria-label="关闭实景照片">×</button>
+      <figure class="realwall-fig">
+        <img alt="" />
+        <figcaption></figcaption>
+      </figure>
+      <figure class="realwall-fig">
+        <img alt="" />
+        <figcaption></figcaption>
+      </figure>
+    </div>
 
     <!-- 底部界面(仅保留编号) -->
     <footer id="bottom-bar">
@@ -75,8 +93,11 @@
     // 加载看门狗:45s 内 showcase.js 未初始化(CDN 不可达/网络异常)才提示。
     // 45s 覆盖冷缓存场景(实测 jsDelivr 冷缓存 ~21s + 模块解析 ~7s ≈ 28s,
     // 25s 会误报;预热后第二次打开 ~10s)
+    // ?nowatchdog=1(调试参数):跳过看门狗——发布前本地测试撞 jsDelivr 对
+    // 不存在 tag 的挂起漂移(加载可被拖到 45s+)时,避免 error 面板误报遮屏
     window.__showcaseReady = false;
-    setTimeout(function () {
+    var nowatchdog = location.search.indexOf("nowatchdog=1") !== -1;
+    if (!nowatchdog) setTimeout(function () {
       if (!window.__showcaseReady) {
         document.getElementById("loading").style.display = "none";
         var err = document.getElementById("error");
@@ -90,7 +111,7 @@
   <!-- 引导:主模块 CDN 优先(国内快),失败自动重试一次再回退本地。
        showcase.js 内相对导入 ./showcase-config.js 跟随模块来源自动切换 -->
   <script type="module">
-    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.5/";
+    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.6/";
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let ok = false;
     for (let attempt = 0; attempt < 2 && !ok; attempt++) {

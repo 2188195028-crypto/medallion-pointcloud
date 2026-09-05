@@ -257,6 +257,126 @@ body {
   will-change: opacity, transform;
 }
 
+/* ---- 落地实景(店面前后对比照片) ---- */
+/* 缩略图:细边框小图,与工艺标签同一边框语言;hover 边框转金 */
+#realwall-thumbs {
+  display: flex;
+  gap: calc(10px * var(--layout-scale));
+}
+
+.realwall-thumb {
+  padding: 0;
+  background: none;
+  border: 1px solid rgba(239, 230, 207, 0.3);
+  border-radius: 2px;
+  cursor: pointer;
+  overflow: hidden;
+  line-height: 0;
+  transition: border-color 0.3s ease;
+}
+
+.realwall-thumb img {
+  display: block;
+  width: calc(76px * var(--layout-scale));
+  height: calc(95px * var(--layout-scale));
+  object-fit: cover;
+  transition: filter 0.3s ease;
+  filter: saturate(0.88) brightness(0.94);
+}
+
+.realwall-thumb:hover,
+.realwall-thumb:focus-visible {
+  border-color: var(--gold);
+}
+
+.realwall-thumb:hover img,
+.realwall-thumb:focus-visible img {
+  filter: none;
+}
+
+.realwall-thumb:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* 大图查看器:全屏遮罩,左右并排两图(竖屏上下堆叠) */
+/* 注意:必须有 [hidden] display:none,否则 flex 会覆盖 hidden 导致遮罩常驻(同 #error 的坑) */
+#realwall-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(20px, 4vw, 56px);
+  padding: clamp(16px, 4vh, 48px);
+  background: rgba(16, 25, 23, 0.96);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+#realwall-overlay.show {
+  opacity: 1;
+}
+
+#realwall-overlay[hidden] {
+  display: none;
+}
+
+.realwall-fig {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.realwall-fig img {
+  display: block;
+  max-width: min(38vw, 520px);
+  max-height: 76vh;
+  object-fit: contain;
+  border: 1px solid rgba(239, 230, 207, 0.35);
+}
+
+.realwall-fig figcaption {
+  font-family: var(--font-serif);
+  font-size: calc(13px * var(--layout-scale));
+  letter-spacing: 0.18em;
+  color: var(--body-secondary);
+  text-align: center;
+}
+
+/* 关闭按钮:右上角,细边框,与整体控件同一语言 */
+#realwall-close {
+  position: absolute;
+  top: clamp(14px, 2.6vh, 28px);
+  right: clamp(14px, 2.6vw, 32px);
+  width: 44px;
+  height: 44px;
+  font-family: var(--font-sans);
+  font-size: 24px;
+  line-height: 1;
+  color: var(--body-secondary);
+  background: transparent;
+  border: 1px solid rgba(239, 230, 207, 0.3);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.3s ease, border-color 0.3s ease;
+}
+
+#realwall-close:hover,
+#realwall-close:focus-visible {
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+#realwall-close:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
 /* ---- 底部界面 ---- */
 #bottom-bar {
   position: fixed;
@@ -266,7 +386,7 @@ body {
   z-index: 3;
   display: flex;
   align-items: center;
-  justify-content: space-between; /* 编号在左、重启在右 */
+  justify-content: flex-start; /* 底部仅保留编号(counter),置左 */
 }
 
 #counter {
@@ -275,33 +395,6 @@ body {
   letter-spacing: 0.18em;
   color: var(--body-subtle);
   white-space: nowrap;
-}
-
-/* （底部计时进度条已移除：仅保留编号与重启按钮，左右分布） */
-
-/* 重启按钮：细边框，小圆角，低调 */
-#restart {
-  font-family: var(--font-body);
-  font-size: calc(12.5px * var(--layout-scale));
-  letter-spacing: 0.18em;
-  color: var(--body-secondary);
-  background: transparent;
-  border: 1px solid rgba(239, 230, 207, 0.3);
-  border-radius: 3px;
-  padding: calc(5px * var(--layout-scale)) calc(14px * var(--layout-scale));
-  cursor: pointer;
-  transition: all 0.3s ease;
-  white-space: nowrap;
-}
-
-#restart:hover {
-  color: var(--gold);
-  border-color: var(--gold);
-}
-
-#restart:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 2px;
 }
 
 /* ---- 加载 / 错误状态 ---- */
@@ -380,20 +473,44 @@ body {
 @media (orientation: portrait) {
   #text-panel {
     left: 7vw;
-    top: 5.5vh;
+    top: 3.5vh;
     width: 86vw;
     /* 手机端改为纵向 flex, 用 order 把"主要颜色/工艺线索"移到正文(四季山水)上方 */
     display: flex;
     flex-direction: column;
   }
-  #meta { order: 1; }
+  #meta { order: 1; margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.5); }
   #body-wrap { order: 2; }
-  #features { order: 3; }
+  #features {
+    order: 3;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: calc(4px * var(--layout-scale)) calc(14px * var(--layout-scale));
+    margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.4);
+  }
   #body-wrap {
     max-width: none;
   }
   #bottom-bar {
     bottom: 2.6vh;
+  }
+  /* 竖屏 layout-scale≈0.55 会把 12px 编号缩到 ~7px 不可读,设最小字号下限 */
+  #counter {
+    font-size: max(calc(12px * var(--layout-scale)), 12px);
+  }
+  /* 落地实景:缩略图按视口宽取值(layout-scale 在窄屏下太小),大图上下堆叠 */
+  .realwall-thumb img {
+    width: 13vw;
+    height: 16vw;
+  }
+  #realwall-overlay {
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+  }
+  .realwall-fig img {
+    max-width: 78vw;
+    max-height: 36vh;
   }
 }
 
@@ -406,7 +523,7 @@ body {
   #loading span {
     animation: none;
   }
-  #progress-fill {
+  #realwall-overlay {
     transition: none;
   }
 }

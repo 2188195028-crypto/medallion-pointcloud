@@ -51,8 +51,15 @@ export default {
   ],
   craftTags: ["描金", "回纹", "工笔", "重彩"],
 
+  // ---- 落地实景(汉中福地茶业店面墙绘前后对比,点击缩略图看大图) ----
+  // 照片需随仓库入库(与 reference.jpg 同理,CDN 部署后线上可看)。
+  realwall: [
+    { path: "assets/wall-before.webp", caption: "改造前 · 店面原始墙面" },
+    { path: "assets/wall-after.webp", caption: "落地后 · 上墙效果" },
+  ],
+
   // ---- 模型 ----
-  // mode="data"：加载预采样粒子数据(assets/particles.bin，~4MB，秒开，GitHub Pages 部署用)
+  // mode="data"：加载预采样粒子数据(assets/particles.bin，1.98MB/90000 粒子，秒开，GitHub Pages 部署用)
   // mode="glb" ：浏览器内加载 GLB 并采样(需 111MB 模型，开发/验证用)
   mode: "data",
   particleDataPath: "assets/particles.bin",
@@ -60,7 +67,7 @@ export default {
   // 粒子数据 CDN 镜像:GitHub Pages 在国内网络下载 bin 极慢(实测 27-45KB/s,
   // 1.98MB 需 70s+),jsDelivr 国内节点 ~2s。15s 超时失败自动回退本地。
   // 用版本 tag(v1.1)而非 @master:不可变 URL 缓存永久生效,推送新 commit 不失效。
-  cdnBase: "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.5/",
+  cdnBase: "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.6/",
   // 参考照片(粒子取色源):模型贴图与照片四季布局不一致(照片左侧为黛蓝雪山、
   // 右上为朱红秋山,模型贴图缺失这些色域),按粒子盘面位置采样照片像素,
   // 保证渲染颜色布局与照片一致。照片 232KB,需随仓库入库(GitHub Pages)。

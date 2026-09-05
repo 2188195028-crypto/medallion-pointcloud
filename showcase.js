@@ -1,8 +1,8 @@
 /* ============================================================
    showcase.js — 繁荣昌盛 · 四季山水圆盘点云展陈
-   GLB → 180,000 表面粒子（面积加权 + 细节补偿）→ GPU 动画
-   10 秒完整时间线 + 分辨率自适应 + 运行诊断
-   调试：URL 加 ?t=5.2 可把时间线冻结在指定秒数（截图验证用）
+   GLB → 90,000 表面粒子（面积加权 + 细节补偿）→ GPU 动画
+   纯交互模式（入场升起/平时旋转/滚轮·滑动手势消散回升，无自动循环）
+   调试：URL 加 ?t=5.2 冻结相位（按原时间线映射，截图验证用）
    作者：Ligong-Wenchang  日期：2026-08-03
    ============================================================ */
 import * as THREE from "three";
@@ -102,6 +102,104 @@ config.craftTags.forEach((tag) => {
   li.textContent = tag;
   tagsEl.appendChild(li);
 });
+
+// ---------- 落地实景(店面前后对比照片,点击缩略图看大图) ----------
+// 资源路径与粒子数据同规则:CDN 优先,失败回退本地相对路径。
+// (新 tag 发布前 CDN 上尚无 webp,无回退会 404 裂图——与照片取色二级回退同理)
+const realwallThumbsEl = document.getElementById("realwall-thumbs");
+const realwallOverlayEl = document.getElementById("realwall-overlay");
+
+function realwallAssetUrl(path) {
+  return config.cdnBase ? config.cdnBase + path : path;
+}
+
+// 实景图回退:error 事件(CDN 404)换本地相对路径重试一次(dataset 防死循环);
+// jsDelivr 对不存在的 tag 偶发"挂起"——请求不成功也不失败、error 永不触发,
+// 故另设 8s 超时兜底:仍未加载成功同样换本地(与 bin 15s 超时回退同构)
+function attachRealwallFallback(img, path) {
+  const tryLocal = () => {
+    if (img.dataset.fallback) return;
+    if (img.complete && img.naturalWidth > 0) return; // 已成功
+    img.dataset.fallback = "1";
+    console.warn("[showcase] 实景图 CDN 加载失败/挂起,回退本地", path);
+    img.src = path;
+  };
+  img.addEventListener("error", tryLocal);
+  setTimeout(tryLocal, 8000);
+}
+
+// 大图查看器是否打开(打开期间滚轮/触摸手势不再控制粒子消散)
+function realwallIsOpen() {
+  return !!realwallOverlayEl && !realwallOverlayEl.hidden;
+}
+
+let realwallLastFocus = null;
+function openRealwall() {
+  if (!realwallOverlayEl || !realwallOverlayEl.hidden) return;
+  realwallLastFocus = document.activeElement;
+  realwallOverlayEl.hidden = false;
+  requestAnimationFrame(() => realwallOverlayEl.classList.add("show"));
+  const closeBtn = document.getElementById("realwall-close");
+  if (closeBtn) closeBtn.focus();
+}
+
+function closeRealwall() {
+  if (!realwallOverlayEl || realwallOverlayEl.hidden) return;
+  realwallOverlayEl.classList.remove("show");
+  realwallOverlayEl.hidden = true;
+  if (realwallLastFocus && typeof realwallLastFocus.focus === "function") {
+    realwallLastFocus.focus();
+  }
+  realwallLastFocus = null;
+}
+
+if (realwallThumbsEl && realwallOverlayEl && Array.isArray(config.realwall)) {
+  // 缩略图按钮
+  config.realwall.forEach((p) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "realwall-thumb";
+    btn.setAttribute("aria-label", "查看实景照片:" + p.caption);
+    const img = document.createElement("img");
+    img.src = realwallAssetUrl(p.path);
+    attachRealwallFallback(img, p.path);
+    img.alt = p.caption;
+    img.loading = "lazy";
+    btn.appendChild(img);
+    btn.addEventListener("click", openRealwall);
+    realwallThumbsEl.appendChild(btn);
+  });
+  // 大图与图注(结构在 index.html 静态写好,此处注入路径与文案)
+  realwallOverlayEl.querySelectorAll(".realwall-fig").forEach((fig, i) => {
+    const p = config.realwall[i];
+    if (!p) return;
+    const img = fig.querySelector("img");
+    const cap = fig.querySelector("figcaption");
+    if (img) {
+      img.src = realwallAssetUrl(p.path);
+      attachRealwallFallback(img, p.path);
+      img.alt = p.caption;
+    }
+    if (cap) cap.textContent = p.caption;
+  });
+  const realwallCloseBtn = document.getElementById("realwall-close");
+  if (realwallCloseBtn) {
+    realwallCloseBtn.addEventListener("click", closeRealwall);
+  }
+  // 点背景关闭,点照片不关
+  realwallOverlayEl.addEventListener("click", (e) => {
+    if (e.target === realwallOverlayEl) closeRealwall();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (!realwallIsOpen()) return;
+    if (e.key === "Escape") closeRealwall();
+    if (e.key === "Tab") {
+      // 焦点圈定:查看器内仅关闭按钮可聚焦
+      e.preventDefault();
+      if (realwallCloseBtn) realwallCloseBtn.focus();
+    }
+  });
+}
 
 // ---------- 场景 ----------
 let renderer;
@@ -275,7 +373,7 @@ function setPhase(target, speed) {
   flow.easing = true;
 }
 
-// 每帧推进相位缓动(入场慢速 ~0.9s 动画;触发消散/升起快速 0.33s)
+// 每帧推进相位缓动:入场/回升 0.45/s(~2.2s)、消散 0.5/s(~2s),未显式指定时默认 3.0/s 快速
 function updateFlow(dt) {
   if (!flow.easing) return;
   const diff = flow.target - flow.phase;
@@ -294,6 +392,7 @@ let gestureAccum = 0;
 let gestureTimer = null;
 
 function handleGesture(d) {
+  if (realwallIsOpen()) return; // 大图查看器打开时不控制粒子
   gestureAccum += d;
   if (Math.abs(gestureAccum) >= GESTURE_THRESHOLD) {
     if (gestureAccum > 0) setPhase(0, 0.5); // 下滑/前翻 → 消散
@@ -310,6 +409,7 @@ window.addEventListener("wheel", (e) => handleGesture(e.deltaY), { passive: true
 let touchStartY = null;
 let touchAccum = 0;
 window.addEventListener("touchstart", (e) => {
+  if (realwallIsOpen()) return; // 查看器内的滑动不触发消散/升起
   touchStartY = e.touches[0].clientY;
   touchAccum = 0;
 }, { passive: true });
@@ -904,7 +1004,17 @@ function loadPhotoTexture() {
     const img = new Image();
     // 照片可能来自 CDN(crossOrigin=anonymous 避免 canvas 被跨域污染,getImageData 才能用)
     img.crossOrigin = "anonymous";
+    // jsDelivr 对不存在的 tag 偶发"挂起"(请求不成功也不失败、onerror 永不触发),
+    // 与实景图 8s 兜底同构:超时换本地;本地再失败才回退色板。无此兜底会一直
+    // 停在 loading(直到 45s 看门狗弹错误面板),页面永远无法成形。
+    const watchdog = setTimeout(() => {
+      if (img.complete && img.naturalWidth > 0) return; // 已成功
+      if (img.src === config.photoPath) return; // 已在本地路径,等 onload/onerror 落定
+      console.warn("[showcase] 参考照片 CDN 加载失败/挂起,回退本地");
+      img.src = config.photoPath;
+    }, 8000);
     img.onerror = () => {
+      clearTimeout(watchdog);
       // CDN 照片失败 → 回退本地;本地也失败 → 回退色板重映射
       if (img.src !== config.photoPath) {
         img.src = config.photoPath;
@@ -913,6 +1023,7 @@ function loadPhotoTexture() {
       resolve();
     };
     img.onload = () => {
+      clearTimeout(watchdog);
       try {
         // 保持原尺寸加载(1290×1315,圆盘几何硬编码在 config,不缩放避免坐标换算)
         const c = document.createElement("canvas");
@@ -1107,8 +1218,6 @@ function updateText(dt) {
   bodyEl.textContent = config.bodyZh.slice(0, typed);
   cursorEl.style.opacity = REDUCED || typed < len ? "1" : "0";
 }
-
-// （底部计时进度条已按用户要求移除）
 
 // ---------- 主循环 ----------
 let rotTotal = 0; // 连续旋转相位（不重置，避免衔接瞬跳）
