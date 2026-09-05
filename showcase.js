@@ -16,8 +16,7 @@ import config from "./showcase-config.js";
 const RV = config.referenceViewport; // 1280×720 基准
 const REF = config.referencePointSize;
 const STAGE = config.stage;
-const TL = config.timeline;
-const DURATION = config.duration; // 10 秒
+const TL = config.timeline; // 仅 typeRate 活跃(纯交互模式,其余时间线字段已清理)
 const FOV_RAD = (STAGE.fov * Math.PI) / 360;
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -1011,11 +1010,28 @@ function loadPhotoTexture() {
       if (img.complete && img.naturalWidth > 0) return; // 已成功
       if (img.src === config.photoPath) return; // 已在本地路径,等 onload/onerror 落定
       console.warn("[showcase] 参考照片 CDN 加载失败/挂起,回退本地");
+      // 审计修复(v1.7):改 src 会使浏览器 abort 旧 CDN 请求并派发迟到的 error;
+      // 若把它当成"本地失败"会提前 resolve,本地照片随后成功也被弃用。
+      // 切本地后首个 error 视为旧请求迟到 abort(忽略),第二个 error 才是本地失败;
+      // 另加 1.5s 强制落定兜底,覆盖"无迟到 error 且本地静默失败"的边缘。
+      img.onerror = null;
       img.src = config.photoPath;
+      let errCount = 0;
+      img.onerror = () => {
+        clearTimeout(watchdog);
+        if (++errCount === 1) {
+          console.warn("[showcase] 旧 CDN 请求迟到 error,忽略(本地路径仍在加载)");
+          return;
+        }
+        resolve(); // 本地也失败 → 回退色板重映射
+      };
+      setTimeout(() => {
+        if (!(img.complete && img.naturalWidth > 0)) resolve(); // 兜底落定(幂等)
+      }, 1500);
     }, 8000);
     img.onerror = () => {
       clearTimeout(watchdog);
-      // CDN 照片失败 → 回退本地;本地也失败 → 回退色板重映射
+      // CDN 照片失败 → 回退本地;本地也失败 → 回退色板重映射(此路径无 src 切换竞态)
       if (img.src !== config.photoPath) {
         img.src = config.photoPath;
         return;
@@ -1217,6 +1233,9 @@ function updateText(dt) {
   const typed = REDUCED ? len : Math.min(len, Math.max(0, Math.floor((e - 0.6) * TL.typeRate)));
   bodyEl.textContent = config.bodyZh.slice(0, typed);
   cursorEl.style.opacity = REDUCED || typed < len ? "1" : "0";
+  // 审计修复(v1.7):打字完成后停掉 blink——CSS keyframes 的优先级高于 inline
+  // opacity,否则光标以 1px 宽度永久闪烁(reduced-motion 下 CSS 已是 animation:none)
+  if (typed >= len && !REDUCED) cursorEl.style.animation = "none";
 }
 
 // ---------- 主循环 ----------

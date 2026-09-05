@@ -1,15 +1,18 @@
 /* ============================================================
    verify.js — 多分辨率浏览器回归验证(Playwright + 系统 Edge)
-   A) 动态 resize:1280×720 → 1920×1080 → 2560×1440(?t=5.2 冻结成形态,不刷新)
+   A) 动态 resize:1280×720 → 1920×1080 → 2560×1440(交互态自然跑,不刷新)
    B) 1366×768 静态视口
    C) 冻结状态 ?t=0(散开)/ ?t=5.2(成形) 对比截图
    D) 手机 390×844(isMobile+hasTouch,触屏降档)
-   顺带断言/采集:实景缩略图加载(naturalWidth>0,覆盖 CDN 404 回退)、
-   粒子数日志 = 90000、加载耗时(吸收原 time-load.js 职能)、
-   控制台零 pageerror/error、竖屏 order(meta 在正文上方)、无横向溢出。
+   静止态契约(waitBody):waitForReady 等 loading 隐藏 + 打字机 103 字打满 +
+   入场淡入 2.5s 后才截图/采集——收容断言(meta/缩略图/字号)必须落在静止态。
+   断言:实景缩略图 2 张加载(naturalWidth>0,覆盖 CDN 404 回退)、粒子数 90000、
+   加载耗时、零 pageerror/error、竖屏 order(meta 在正文上方)、无横向溢出、
+   桌面缩略图底不压底栏(≥8px 空距)、meta 底不超视口、手机字号下限
+   (正文≥11/标签≥10/特征词≥12)与 features 底不越稠密盘线(≤376)。
    输出:shots/verify-*.png + shots/verify-report.json;阻断断言失败退出码 1。
    用法:先起服务器 python tools/serve_debug.py 8137,再 node tools/verify.js
-   作者:Ligong-Wenchang  日期:2026-09-05(重写:msedge 通道 + 纯交互模式 + realwall)
+   作者:Ligong-Wenchang  日期:2026-09-05(重写:msedge 通道 + 纯交互模式 + realwall;v1.7:静止态断言)
    ============================================================ */
 const { chromium } = require("playwright-core");
 const path = require("path");
@@ -26,7 +29,11 @@ function record(group, type, text) {
   logs.push(`[${group}][${type}] ${text}`);
 }
 
-async function waitForReady(page, group) {
+// waitBody=true 时额外等待打字机完成(正文 103 字打满,textContent 长度达到),
+// 保证截图/几何落在"静止态"(v1.7 起:桌面收容断言必须以静止态布局为准,
+// 打字中途截图会被视觉模型误读为截断,几何也偏小)。注意:?t= 冻结时间线的
+// 组(如 C 组 t=0/t=5.2)不可用 waitBody——冻结会停在打字完成前一刻。
+async function waitForReady(page, group, waitBody = false) {
   const t0 = Date.now();
   await page.waitForFunction(
     () => {
@@ -36,9 +43,16 @@ async function waitForReady(page, group) {
     null,
     { timeout: 180000 }
   );
+  if (waitBody) {
+    await page.waitForFunction(
+      () => document.getElementById("body").textContent.length >= 103,
+      null,
+      { timeout: 60000 }
+    );
+  }
   const loadMs = Date.now() - t0;
-  record(group, "info", `loading 消失耗时 ${loadMs}ms`);
-  await page.waitForTimeout(2500); // 渲染稳定 + 打字机/淡入进行
+  record(group, "info", `loading 消失耗时 ${loadMs}ms${waitBody ? "(含打字完成)" : ""}`);
+  await page.waitForTimeout(2500); // 渲染稳定 + 入场淡入完成
   return loadMs;
 }
 
@@ -97,10 +111,30 @@ async function collect(page) {
         const img = t.querySelector("img");
         return img && img.naturalWidth > 0;
       }),
+      // v1.7 静止态收容断言字段:缩略图底 vs 底栏顶、meta 底不超视口
+      metaBottom: +metaRect.bottom.toFixed(1),
+      thumbsBottom: thumbs.length
+        ? +Math.max(...thumbs.map((t) => t.querySelector("img").getBoundingClientRect().bottom)).toFixed(1)
+        : null,
+      barTop: r("#bottom-bar") ? +document.getElementById("bottom-bar").getBoundingClientRect().top.toFixed(1) : null,
+      featuresBottom: (() => {
+        const f = document.getElementById("features");
+        return f ? +f.getBoundingClientRect().bottom.toFixed(1) : null;
+      })(),
       bottomBar: r("#bottom-bar"),
       loadingHidden: document.getElementById("loading").style.display === "none",
       // 看门狗误报防护:error 面板必须始终隐藏(出现即加载真失败,假绿防护)
       errorVisible: !document.getElementById("error").hidden,
+      // 竖屏字号下限(审计 HIGH:v1.6 手机正文 7.8px/标签 6.7px 不可读,v1.7 加 floor)
+      fsBody: parseFloat(getComputedStyle(document.getElementById("body")).fontSize),
+      fsLabel: (() => {
+        const l = document.querySelector(".meta-label");
+        return l ? parseFloat(getComputedStyle(l).fontSize) : null;
+      })(),
+      fsFeatureLi: (() => {
+        const li = document.querySelector("#features li");
+        return li ? parseFloat(getComputedStyle(li).fontSize) : null;
+      })(),
     };
   });
 }
@@ -147,8 +181,10 @@ async function main() {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     const page = await makePage(ctx, "A");
     const t0 = Date.now();
-    await page.goto(BASE + "?t=5.2&v=8&nowatchdog=1", { timeout: 180000 });
-    await waitForReady(page, "A");
+    // 不冻结时间线(?t=5.2 会停在打字完成前一刻,waitBody 等不到 103 字):
+    // 交互态自然等打字完成,粒子旋转不影响布局断言
+    await page.goto(BASE + "?v=8&nowatchdog=1", { timeout: 180000 });
+    await waitForReady(page, "A", true);
     await waitThumbsSettle(page, "A", 20000);
     record("A", "info", `goto→ready 总耗时 ${Date.now() - t0}ms`);
     await page.screenshot({ path: path.join(SHOTS, "verify-1280x720.png") });
@@ -170,8 +206,8 @@ async function main() {
   {
     const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 } });
     const page = await makePage(ctx, "B");
-    await page.goto(BASE + "?t=5.2&v=9&nowatchdog=1", { timeout: 180000 });
-    await waitForReady(page, "B");
+    await page.goto(BASE + "?v=9&nowatchdog=1", { timeout: 180000 });
+    await waitForReady(page, "B", true);
     await waitThumbsSettle(page, "B", 20000);
     await page.screenshot({ path: path.join(SHOTS, "verify-1366x768.png") });
     report["1366x768"] = await collect(page);
@@ -202,8 +238,8 @@ async function main() {
       deviceScaleFactor: 2,
     });
     const page = await makePage(ctx, "D");
-    await page.goto(BASE + "?t=5.2&v=m&nowatchdog=1", { timeout: 180000 });
-    await waitForReady(page, "D");
+    await page.goto(BASE + "?v=m&nowatchdog=1", { timeout: 180000 });
+    await waitForReady(page, "D", true);
     await waitThumbsSettle(page, "D", 20000);
     await page.screenshot({ path: path.join(SHOTS, "verify-390x844.png") });
     report["390x844"] = await collect(page);
@@ -235,6 +271,25 @@ async function main() {
       fails.push(`${name} 实景缩略图异常: count=${c.realwallThumbs} loaded=${c.realwallLoaded}`);
     }
     if (c.errorVisible) fails.push(`${name} 看门狗 error 面板可见(加载被拖过 45s,判失败)`);
+    // ---- v1.7 静止态收容断言 ----
+    const isPortrait = c.viewport && c.viewport[1] > c.viewport[0];
+    if (c.metaBottom !== undefined && c.metaBottom > c.viewport[1]) {
+      fails.push(`${name} meta 底 ${c.metaBottom} 超出视口高 ${c.viewport[1]}`);
+    }
+    // 桌面:实景缩略图底不得压底栏(独立审核 BLOCKER:v1.6 静止态 0-3px 可见)
+    if (!isPortrait && c.thumbsBottom != null && c.barTop != null && c.thumbsBottom > c.barTop - 8) {
+      fails.push(`${name} 缩略图压底栏: thumbsBottom ${c.thumbsBottom} > barTop-8 ${(c.barTop - 8).toFixed(1)}`);
+    }
+    // 手机:features 底不得越过粒子稠密盘上缘(实测 378px@390×844,留 2px 容差)
+    if (c.viewport && c.viewport[0] === 390 && c.featuresBottom != null && c.featuresBottom > 376) {
+      fails.push(`${name} 手机 features 底 ${c.featuresBottom} 越过稠密盘上缘 376`);
+    }
+    // 手机字号下限(审计 HIGH):正文 ≥11、标签 ≥10、特征词 ≥12
+    if (isPortrait) {
+      if (c.fsBody < 10.9) fails.push(`${name} 手机正文字号 ${c.fsBody}px < 11px 下限`);
+      if (c.fsLabel < 9.9) fails.push(`${name} 手机标签字号 ${c.fsLabel}px < 10px 下限`);
+      if (c.fsFeatureLi < 11.9) fails.push(`${name} 手机特征词字号 ${c.fsFeatureLi}px < 12px 下限`);
+    }
   }
   if (!particleOk) fails.push("粒子数日志未确认 = 90000");
   if (errors.length) fails.push(`控制台 ${errors.length} 条真实 pageerror/error(见 report.console.errors)`);

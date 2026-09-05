@@ -32,12 +32,14 @@
 - assets/three/ — 本地 three.js r184 全套(离线可用)
 - assets/models/prosperity.glb — GLB 副本(111MB+,**不入库**,仅本地)
 - assets/reference.jpg — 参考照片(232KB,**入库**,粒子取色源,必须随仓库部署)
+- assets/wall-before.webp / wall-after.webp — 落地实景照片(店面前后对比,**入库**)
 - tools/serve_debug.py — 本地服务器 + /shot /diag 调试接口
 - tools/prepare_particles.py — GLB → particles.bin 预采样脚本
-- tools/verify.js — 多视口浏览器回归验证(Playwright)
-- tools/final-check.js — 循环/重启验证
-- tools/time-load.js — 加载耗时测量
+- tools/verify.js — 多视口浏览器回归验证(Playwright + 系统 Edge 的 msedge 通道)
+- tools/shot-realwall.js — 落地实景全流程交互验证(桌面开/Esc/背景/大图 + 手机)
+- PROJECT_STATUS.md — 项目状态与执行记录(需求/资产/验收/问题-修复-复测表)
 - shots/ — 验证截图与报告(不入库)
+- (tools/final-check.js、time-load.js 已删:验证对象与职责已被 verify.js 吸收)
 
 ## 核心机制
 
@@ -60,6 +62,20 @@
   任何色板重映射都补不出蓝色,必须直接取照片像素。
 - 照片加载失败时回退 `remapColorsToPalette()`(config.paletteRemap 13 色)。
 - 照片需随仓库入库(GitHub Pages 部署时必须包含 assets/reference.jpg)。
+- **CDN "挂起"超时兜底(8s)**:jsDelivr 对不存在的 tag / 资源偶发"挂起"
+  (请求不成功也不失败、onerror 永不触发,本项目多次实测)→ 8s 未成功则换本地
+  相对路径重试(clearTimeout 于 onload/onerror;本地再失败才回退色板)。
+
+### 落地实景(realwall,店面前后对比照片)
+- config.realwall 数组(路径+图注)→ 缩略图 button(.realwall-thumb,aria-label)注入
+  #realwall-thumbs;index.html 静态写好 #realwall-overlay(硬编码 2 个 .realwall-fig)。
+- 大图查看器:缩略图点击 → overlay(role=dialog aria-modal,焦点移到关闭钮);
+  Esc/背景点击/关闭钮关闭,关闭后焦点还原触发按钮。
+- **交互守卫**:overlay 打开期间(realwallIsOpen)滚轮/触摸手势不得触发粒子消散。
+- CDN 失败回退与照片同构:error 事件 + 8s 挂起超时,dataset 标记防死循环
+  (attachRealwallFallback,缩略图与大图共用)。
+- **加第 3 张实景图必须同步**:config.realwall 加条目 + index.html overlay 加一个
+  .realwall-fig 结构 + 确认 CSS 排布(桌面双图/竖屏上下堆叠)。
 
 ### 拖拽旋转(showcase.js 的 dragRot)
 - pointerdown 按下 → pointermove 累计 angle(dx × 0.006) → 按住时暂停自转
@@ -88,12 +104,30 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
   (重要:触摸用"手势起止总位移"判定,轻触/点击位移≈0 不会误触发)
 
 ### 布局与适配
-- 桌面:左文右图(文字 7vw/9.5vh/32vw,模型中心 ~72% 视口,modelXFraction=0.505)
-- 竖屏(手机):文字上移(7vw/5.5vh/86vw),模型居中缩小(portraitScale 0.55,
-  portraitCenterY -0.12);layoutScale 竖屏按 max(0.45,min(1.1,w/700))
+- 桌面:左文右图(文字位置由 JS 从 config.referenceTextLayout 注入
+  --text-left/--text-top/--text-width=7vw/7vh/32vw,CSS 内 var() 默认值只是兜底——
+  改文字位置改 config 而非 CSS;模型中心 ~72% 视口,modelXFraction=0.505)
+- 竖屏(手机):文字上移(text-panel top 1.6vh,CSS portrait 块字面值盖过变量),
+  模型居中缩小(portraitScale 0.55,portraitCenterY -0.12);layoutScale 竖屏按
+  max(0.45,min(1.1,w/700))
 - **竖屏文字顺序(v1.6)**:#text-panel 在 portrait 媒体查询内改为 flex 纵向,
   用 order 把 #meta(主要颜色/工艺线索)移到 #body-wrap(正文/四季山水)上方,
   避免被模型遮挡。桌面端不受影响(order 只在竖屏生效)。
+- **竖屏压缩(v1.6 tag)**:realwall 缩略图上架后把 #meta 撑高,正文末行与特征词
+  会被压入粒子稠密盘面 → portrait 块内:panel top 3.5vh、缩略图 21vw→13vw、
+  #features 改横排 flex-wrap、#counter 最小字号 12px(layout-scale 会缩到 ~7px)。
+  改 portrait 布局后必须复跑 verify D 组(几何:features 底须高于盘面稠密区顶)。
+- **桌面静止态收容(v1.7 tag)**:独立审核 BLOCKER——静止态(打字完成)实景缩略图
+  压进底栏(0-3px 可见,2560 档重叠达 188px)。修复:text-panel top 9.5→7vh
+  (config)、realwall label+缩略图改横向一行、缩略图 76×95→56×66、#body
+  line-height 1.9→1.8、features/meta/palette/tags 的 li 与 .meta-label 显式
+  line-height(继承 1.9 时 19px 字会变成 36px 行,是溢出主因)、区块间距按
+  0.2-0.4×gapBlock 收紧。改文字区任何尺寸/行高后,静止态收容断言(缩略图底
+  ≥ barTop−8)必须全绿。
+- **手机字号下限(v1.7 tag)**:layout-scale≈0.557 会把 12px 参考字号缩到 6.7px
+  (审核 HIGH),正文/特征词/标签/图注加 max(calc(Npx×scale), 11/12/10/10px)
+  地板;配合 portrait 收紧(panel 1.6vh、meta gap 6px 等)把 features 底抬到
+  364.2(稠密盘上缘 378,留 13.8px)。
 - 触屏设备:关 Bloom、DPR≤1.5
 
 ## 更新模型的完整流程(重要!)
@@ -115,7 +149,11 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
 ## 验证清单(改动后必须做)
 1. `node --check showcase.js && node --check showcase-config.js`
 2. 本地服务器跑起来,Playwright 打开验证:
-   - `node tools/verify.js`(多视口布局回归,~3 分钟)
+   - `node tools/shot-realwall.js`(实景图桌面开/Esc/背景/大图加载 + 手机)
+   - `node tools/verify.js`(多视口布局回归,~4 分钟;内含 errorVisible
+     断言——看门狗 error 面板出现即判失败,杜绝"面板后假绿";v1.7 起静止态
+     契约:waitBody 等打字机 103 字打满再采集,收容断言=桌面缩略图底
+     ≥ barTop−8、meta 底 ≤ 视口高、手机 features 底 ≤ 376 且字号 ≥ 11/10/12)
    - 交互流程:进入升起→稳定→滚轮消散→反向回升(对比像素分布)
 3. 控制台零错误(pageerror 监听)
 4. 粒子数 = 90000(console 日志"实际粒子数量";bin 校验 = 90000)
@@ -132,6 +170,8 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
   (toBlob 必须双 rAF 内抓取,否则全黑)
 - `?debug=1` 输出模型矩阵(坐标系排查)
 - `?mode=glb` 临时切 GLB 采样模式
+- `?nowatchdog=1` 跳过 45s 加载看门狗(见部署段)
+- `?v=<任意>` 页面忽略、仅作缓存破除(verify 每组带不同值防同 URL 缓存)
 
 ## 部署(GitHub Pages + jsDelivr CDN)
 **国内网络下 GitHub Pages 下载大文件极慢(实测 27-45KB/s),全部静态资源走 jsDelivr CDN:**
@@ -155,7 +195,12 @@ git tag v1.6 && git push origin v1.6 && git push origin master
 - 常见坑:照片 CDN 加载必须 `img.crossOrigin="anonymous"`(否则 canvas tainted,
   getImageData 抛 SecurityError → 静默回退色板)。
 - 加载看门狗:45s 未初始化显示错误提示(避免 HR 卡转圈;25s 会误报——
-  冷缓存 21s+解析 7s ≈ 28s)。
+  冷缓存 21s+解析 7s ≈ 28s)。URL 加 ?nowatchdog=1 可跳过看门狗(调试/自动化
+  测试用:发布前 CDN 挂起漂移可把加载拖到 45s+,error 面板会遮屏拦点击)。
+- **CDN 挂起三种表现**:对不存在的 tag,jsDelivr 行为逐次不定——快速 404、
+  重定向 raw.githubusercontent 后 ERR_BLOCKED_BY_ORB、或干脆挂起不返回
+  (error 永不触发)。验证脚本按 host 归因(jsDelivr + githubusercontent 的
+  404/失败 = 发布前预期;本地 host 出现 4xx 才是真问题)。
 - **备用 CDN 实测不可达**(此网络):fastly/gcore/testingcf.jsdelivr.net、
   statically.io 全部超时,只有 cdn.jsdelivr.net 通。改 CDN 前先 curl 验证。
 - HTTPS push 常超时(网络),已切 SSH:
@@ -184,6 +229,23 @@ git tag v1.6 && git push origin v1.6 && git push origin master
 12. 分析参考照片颜色时,PIL 量化被大面积低饱和底色骗了(误判"象牙白+金")。
     真实是浓艳工笔重彩(右上朱红/左侧黛蓝)。教训:量化 + 视觉模型 + 空间分布
     三路交叉验证;色相取模公式有边缘 bug(蓝紫被算成品红),通道比较法更可靠
+13. 参考照片/实景图 CDN "挂起"无兜底 → 页面停在 loading 直到看门狗弹错误面板。
+    所有 CDN 资源回退必须配超时(实景图/照片 8s、bin 15s abort),不能只靠
+    onerror——jsDelivr 挂起时 onerror 永不触发
+14. 竖屏 layout-scale≈0.55 会把 12px 参考字号缩到 ~7px(counter/标签不可读)。
+    功能状态类文字(编号)需 max(calc(), 下限)保护;正文/特征词靠竖屏压缩
+    (features 横排等)抬出粒子稠密区,不能只缩字号
+15. verify.js 报"本地资源 4xx"含 raw.githubusercontent.com 时,先确认是
+    jsDelivr 302 重定向目标(发布前预期链路)还是真本地资源失败——归因按 host
+16. #body line-height 1.9 会被 features/meta/palette/tags 的 li、.meta-label、
+    实景缩略图 figcaption 继承(19px 特征词变 36px 行,桌面静止态溢出主因)——这
+    类元素必须显式设自己的 line-height
+17. tag 已发布后,本地页面加载的是 CDN released 版 config(jsDelivr @v1.x 命中),
+    工作区改动测不到。要测本地新代码,先把 index.html/showcase-config.js 的引用
+    bump 到下一 tag(如 @v1.7),CDN 404 → 回退本地文件才生效(发布前 404 属设计)
+18. 回退链给 img.src 重新赋值(CDN→本地)会 abort 旧请求,其迟到的 error 事件
+    仍会触发——新资源的 onerror 要防"旧请求迟到 error 误判新资源失败"
+    (errCount 首错忽略/比对 src)
 
 ## 文案/参数修改入口(showcase-config.js)
 - 文案:categoryEn/titleZh/aliasEn/introZh/introSubZh/bodyZh/features/palette/craftTags
@@ -198,6 +260,15 @@ git tag v1.6 && git push origin v1.6 && git push origin master
 - v1.3:three 模块 + 主模块走 CDN;修复照片跨域污染(crossOrigin);看门狗
 - v1.4:看门狗 25s→45s(防冷缓存误报)+ 模块加载自动重试;file:// 双击直开
 - v1.5(标签):移除右下角"重启"按钮(index.html 删 button,showcase.js 删监听)
-- v1.6(仅 CSS,无 tag):竖屏 order 重排——主要颜色/工艺线索移到正文上方。
-  **注意:showcase.css 走 Pages 直出,只改 CSS 不需要递增 tag**(仅改
-  index.html/showcase-config.js/showcase.js 等 CDN 引用资源才需 tag)
+- v1.6(标签 a229998,2026-09-05):竖屏 order 重排 + **落地实景 realwall**
+  (前后对比大图 overlay + CDN error/8s 挂起回退)+ 竖屏压缩(缩略图 13vw/
+  features 横排/counter 最小字号)+ 参考照片 8s 挂起兜底 + 看门狗 nowatchdog
+  调试参数 + verify.js 重写(msedge 通道/errorVisible 断言/settle 等待)。
+  纯 CSS 改动走 Pages 直出**不需要递增 tag**(仅改 index.html/showcase-config.js/
+  showcase.js 等 CDN 引用资源才需 tag);CDN 引用资源改动需 tag 递增为 v1.7 等。
+- v1.7(tag,2026-09-05):独立审核修复轮——桌面静止态收容(缩略图压底栏
+  BLOCKER:text-panel top 7vh/realwall label+缩略图横排 56×66/行高间距收紧)
+  + 手机字号下限(11/12/10px 地板)+ 照片 8s 看门狗竞态(errCount 防迟到 abort
+  error)+ 打字完成光标停闪 + --body-subtle 对比 4.7:1 + 死代码清理。verify.js
+  静止态契约(waitBody 103 字 + 收容/字号断言)。发布:tag v1.7,push tag →
+  master,预热后线上验证全绿。

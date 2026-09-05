@@ -67,7 +67,7 @@ export default {
   // 粒子数据 CDN 镜像:GitHub Pages 在国内网络下载 bin 极慢(实测 27-45KB/s,
   // 1.98MB 需 70s+),jsDelivr 国内节点 ~2s。15s 超时失败自动回退本地。
   // 用版本 tag(v1.1)而非 @master:不可变 URL 缓存永久生效,推送新 commit 不失效。
-  cdnBase: "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.6/",
+  cdnBase: "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.7/",
   // 参考照片(粒子取色源):模型贴图与照片四季布局不一致(照片左侧为黛蓝雪山、
   // 右上为朱红秋山,模型贴图缺失这些色域),按粒子盘面位置采样照片像素,
   // 保证渲染颜色布局与照片一致。照片 232KB,需随仓库入库(GitHub Pages)。
@@ -90,8 +90,7 @@ export default {
     accent: "#61B89F",
   },
 
-  // ---- 时间线与粒子 ----
-  duration: 10, // 秒，固定
+  // ---- 粒子 ----
   binParticleCount: 90000, // particles.bin 粒子数(与渲染数一致,加载校验用)
   particleCount: 90000, // 实际渲染粒子数(加载后均匀无放回抽取;6万偏稀,9万饱满且不杂乱)
   detailSamplingRatio: 0.15,
@@ -115,9 +114,11 @@ export default {
   },
 
   // ---- 参考文字布局（1280×720）----
+  // top 7vh 为 v1.7 收容值:9.5vh 时静止态 meta 压入底栏(独立审核实测 5 档桌面视口),
+  // 收容后逐档收紧至此——底部空距最大的一档仍有 ≥10px 余量
   referenceTextLayout: {
     left: "7vw",
-    top: "9.5vh",
+    top: "7vh",
     width: "32vw",
     bodyLineHeight: 1.9,
     gapTitle: 10, // 标题区内部间距（px，随 layoutScale 缩放）
@@ -147,15 +148,10 @@ export default {
     bloomResolution: 0.5,
   },
 
-  // ---- 文字动画节奏 ----
+  // ---- 文字动画节奏(纯交互模式) ----
+  // 曾含 10s 时间线的 textIn/textOut/paletteIn/featureIn 等字段,改版后未用已清理;
+  // 文本淡入延迟现在直接内联在 showcase.js(0.9s 起依次入场)
   timeline: {
-    bodyTypeStart: 1.55,
     typeRate: 28, // 字符/秒
-    textInStart: 0.75,
-    textInEnd: 1.7,
-    textOutStart: 7.2,
-    textOutEnd: 8.0,
-    paletteIn: 2.75,
-    featureIn: [3.25, 3.6, 3.95],
   },
 };

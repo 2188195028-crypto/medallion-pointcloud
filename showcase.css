@@ -9,10 +9,10 @@
   /* 主题色（与 showcase-config.js theme 保持一致） */
   --bg: #101917;
   --gold: #dca852;
-  --gold-deep: #b8863c;
   --body: #efe6cf;
   --body-secondary: rgba(239, 230, 207, 0.68);
-  --body-subtle: rgba(239, 230, 207, 0.38);
+  /* 0.38 时辅助文字(标签/编号/加载)对比度仅 ~3.2:1,低于 4.5:1(v1.7 审计修复) */
+  --body-subtle: rgba(239, 230, 207, 0.52);
   --accent: #61b89f;
 
   /* 字体家族（全部本地/系统回退，不依赖网络） */
@@ -91,7 +91,7 @@ body {
 #text-panel {
   position: fixed;
   left: var(--text-left, 7vw);
-  top: var(--text-top, 9.5vh);
+  top: var(--text-top, 7.5vh);
   width: var(--text-width, 32vw);
   z-index: 2;
   will-change: opacity, transform;
@@ -114,7 +114,7 @@ body {
   font-weight: 600;
   line-height: 1.12;
   letter-spacing: 0.08em;
-  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.65);
+  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.55);
 }
 
 #alias {
@@ -122,14 +122,14 @@ body {
   font-size: calc(var(--fs-alias) * var(--layout-scale));
   color: var(--body);
   letter-spacing: 0.3em;
-  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.85);
+  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.7);
 }
 
 #intro {
   font-family: var(--font-serif);
   font-size: calc(var(--fs-intro) * var(--layout-scale));
   color: var(--body-secondary);
-  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.9);
+  margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.75);
 }
 
 /* 引言下的副题(如"汉中福地茶业墙绘")：衬线小字、更淡 */
@@ -147,13 +147,13 @@ body {
 /* 行宽由 #text-panel 的 32vw 列宽控制(随视口/缩放连续变化);
    固定 40em 上限会在高分辨率下限制行宽导致异常换行 */
 #body-wrap {
-  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.5);
+  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.3);
 }
 
 #body {
   font-family: var(--font-body);
   font-size: calc(var(--fs-body) * var(--layout-scale));
-  line-height: 1.9;
+  line-height: 1.8; /* 1.9→1.8:v1.7 收容(v1.6 桌面正文 5 行压出底栏 44px 的组成部分) */
   color: var(--body-secondary);
   text-align: justify;
 }
@@ -175,17 +175,20 @@ body {
 }
 
 /* ---- 特征词 ---- */
+/* li 显式 line-height:不设则继承 #body 的 1.9,19px 字号下行高 36px,
+   3 行特征词吃掉 ~108px,是桌面静止态溢出底栏的主因之一(v1.7 收容) */
 #features {
   list-style: none;
-  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.55);
+  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.4);
   display: flex;
   flex-direction: column;
-  gap: calc(6px * var(--layout-scale));
+  gap: calc(4px * var(--layout-scale));
 }
 
 #features li {
   font-family: var(--font-serif);
   font-size: calc(var(--fs-feature) * var(--layout-scale));
+  line-height: 1.25;
   color: var(--gold);
   letter-spacing: 0.12em;
   opacity: 0;
@@ -195,10 +198,10 @@ body {
 /* ---- 主要颜色 / 工艺线索 ---- */
 /* 图录式上下排布：色板一行、标签一行，避免并排换行压到底部进度条 */
 #meta {
-  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.62);
+  margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.4);
   display: flex;
   flex-direction: column;
-  gap: calc(10px * var(--layout-scale));
+  gap: calc(5px * var(--layout-scale));
   align-items: flex-start;
 }
 
@@ -206,9 +209,10 @@ body {
   display: block;
   font-family: var(--font-sans);
   font-size: calc(var(--fs-label) * var(--layout-scale));
+  line-height: 1.3; /* 显式:理由同 #palette li */
   letter-spacing: 0.22em;
   color: var(--body-subtle);
-  margin-bottom: calc(8px * var(--layout-scale));
+  margin-bottom: calc(4px * var(--layout-scale));
 }
 
 #palette,
@@ -227,6 +231,7 @@ body {
   align-items: center;
   gap: calc(6px * var(--layout-scale));
   font-size: calc(var(--fs-label) * var(--layout-scale));
+  line-height: 1.3; /* 显式:继承 #body 的 1.9 会把 12px 色名撑成 22.8px 行高,meta 虚高 */
   color: var(--body-secondary);
   opacity: 0; /* JS 按 2.75s 后依次淡入 */
   transition: opacity 0.3s ease, transform 0.3s ease;
@@ -247,6 +252,7 @@ body {
 #tags li {
   font-family: var(--font-body);
   font-size: calc(var(--fs-label) * var(--layout-scale));
+  line-height: 1.3; /* 显式:理由同 #palette li */
   letter-spacing: 0.08em;
   color: var(--body-secondary);
   border: 1px solid rgba(239, 230, 207, 0.3);
@@ -259,6 +265,17 @@ body {
 
 /* ---- 落地实景(店面前后对比照片) ---- */
 /* 缩略图:细边框小图,与工艺标签同一边框语言;hover 边框转金 */
+/* 桌面:label 与缩略图同行(meta 竖排会把缩略图压出视口底缘——
+   独立审核实测 5 档桌面视口静止态缩略图 0-3px 可见,v1.7 收容修复) */
+#realwall-wrap {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--layout-scale));
+}
+#realwall-wrap .meta-label {
+  margin-bottom: 0;
+  white-space: nowrap;
+}
 #realwall-thumbs {
   display: flex;
   gap: calc(10px * var(--layout-scale));
@@ -277,8 +294,8 @@ body {
 
 .realwall-thumb img {
   display: block;
-  width: calc(76px * var(--layout-scale));
-  height: calc(95px * var(--layout-scale));
+  width: calc(56px * var(--layout-scale));
+  height: calc(66px * var(--layout-scale));
   object-fit: cover;
   transition: filter 0.3s ease;
   filter: saturate(0.88) brightness(0.94);
@@ -471,22 +488,30 @@ body {
 /* ---- 竖屏(手机)适配 ---- */
 /* 文字区移到上端、加宽;模型由 JS 居中下移;底部控件收紧 */
 @media (orientation: portrait) {
+  /* v1.6 为 3.5vh;字号下限使文本列增高,顶部与块间 margin 同步收紧,
+     features 底不得越过粒子稠密区上缘(实测 ~378px,视觉复查后留 ≥14px 空距) */
   #text-panel {
     left: 7vw;
-    top: 3.5vh;
+    top: 1.6vh;
     width: 86vw;
     /* 手机端改为纵向 flex, 用 order 把"主要颜色/工艺线索"移到正文(四季山水)上方 */
     display: flex;
     flex-direction: column;
   }
-  #meta { order: 1; margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.5); }
+  #meta {
+    order: 1;
+    margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.2);
+    gap: calc(6px * var(--layout-scale)); /* v1.6 为 10px,随字号下限收紧 */
+  }
+  /* 竖屏块距:v1.6 为 0.5,随字号下限同步收紧(总高预算见 top 注释) */
+  #body-wrap { margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.25); }
   #body-wrap { order: 2; }
   #features {
     order: 3;
     flex-direction: row;
     flex-wrap: wrap;
     gap: calc(4px * var(--layout-scale)) calc(14px * var(--layout-scale));
-    margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.4);
+    margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.2); /* v1.6 为 0.4 */
   }
   #body-wrap {
     max-width: none;
@@ -498,10 +523,29 @@ body {
   #counter {
     font-size: max(calc(12px * var(--layout-scale)), 12px);
   }
-  /* 落地实景:缩略图按视口宽取值(layout-scale 在窄屏下太小),大图上下堆叠 */
+  /* ---- 竖屏字号下限(v1.7):layout-scale≈0.55 会把正文字缩到 ~7.8px 不可读,
+     审计 HIGH;下限取可读阈值,几何影响由同轮 realwall 横排/间距收紧对冲 ---- */
+  #body {
+    font-size: max(calc(var(--fs-body) * var(--layout-scale)), 11px);
+    line-height: 1.7; /* 桌面 1.8 保留;竖屏行距随字号下限同步调密,控文本列总高 */
+  }
+  .meta-label,
+  #palette li,
+  #tags li {
+    font-size: max(calc(var(--fs-label) * var(--layout-scale)), 10px);
+  }
+  #features li {
+    font-size: max(calc(var(--fs-feature) * var(--layout-scale)), 12px);
+  }
+  .realwall-fig figcaption {
+    font-size: max(calc(13px * var(--layout-scale)), 10px);
+  }
+  /* 落地实景:缩略图按视口宽取值(layout-scale 在窄屏下太小),大图上下堆叠。
+     realwall 区随桌面基础规则走横排(label 与缩略图同行),省出原竖排
+     label 行高,对冲上方字号下限带来的增高 */
   .realwall-thumb img {
-    width: 13vw;
-    height: 16vw;
+    width: 12vw;
+    height: 15vw;
   }
   #realwall-overlay {
     flex-direction: column;
