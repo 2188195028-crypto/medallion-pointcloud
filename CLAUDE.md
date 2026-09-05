@@ -188,8 +188,14 @@ git add -A && git commit -m "..."
 # 3. 打 tag 并推送:先 push tag,再 push master
 git tag v1.6 && git push origin v1.6 && git push origin master
 # 4. 立即预热 jsDelivr(否则用户首次打开撞冷缓存 ~21s+解析 7s ≈ 28s):
-#    curl 拉一遍所有 @v1.6 URL(showcase.js/config/bin/照片/three 全部模块),
-#    并发预热可能被限流返回 404,404 的串行重试即可
+#    预热清单 12 条,curl 逐个拉,404 串行重试(并发预热可能被限流):
+#      showcase.js / showcase-config.js / assets/three/three.module.js /
+#      assets/three/postprocessing/{EffectComposer,RenderPass,UnrealBloomPass}.js /
+#      assets/three/loaders/{GLTFLoader,DRACOLoader}.js /
+#      assets/particles.bin / assets/reference.jpg /
+#      assets/wall-before.webp / assets/wall-after.webp
+#    (注意:importmap "three/addons/" 是前缀映射,剩余部分直接拼在
+#    assets/three/ 后——仓库没有 addons/ 子目录,别按 addons/postprocessing/ 拼)
 # 5. 等 Pages 构建(~2-3 分钟),验证线上 + 本地 file:// 双击
 ```
 - 常见坑:照片 CDN 加载必须 `img.crossOrigin="anonymous"`(否则 canvas tainted,

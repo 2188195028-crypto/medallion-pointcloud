@@ -97,3 +97,5 @@
 | 视觉复核 | ✅ | Kimi 两轮：mobile 间隙确认 + 2560 宽屏通过 |
 | 发布 v1.7 | ✅ | 顺序 commit → tag v1.7 → push tag → push master → 预热 @v1.7 → 线上验证（见下） |
 | 交付 | ✅ | CLAUDE.md/PROJECT_STATUS 同步 + 记忆更新 + 汇报 |
+
+> v1.7 发布轮补记（2026-09-05）：commit 24eee99 + tag v1.7 + push 完成；jsDelivr 12 条 @v1.7 URL 预热全 200（addons 实际路径在 assets/three/{postprocessing,loaders}/，importmap 前缀映射无 addons/ 子目录——预热清单已写入 CLAUDE.md 部署段防再踩）。Pages 构建后线上验证：桌面热载 6.1s / 手机 390×844 6.6s（layoutScale 0.5571、打字 103 字打满、缩略图 2/2 走 CDN、零横向溢出）；二次加载 0 4xx/0 console.error；file:// 双击 10.8s 出全（打字打满 + 缩略图 + 零错误）。与 v1.6 同款现象：tag 推出后最初 ~15 分钟内 jsDelivr 边缘回源未稳，file:// 场景实测 2/4 次撞 bin/照片 CDN 挂起 → 15s 超时走本地回退 → file:// CORS 拦截 → 45s 看门狗提示（该降级路径有重新加载按钮兜底，预热扩散后消失）。
