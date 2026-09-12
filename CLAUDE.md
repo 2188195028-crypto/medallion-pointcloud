@@ -35,8 +35,13 @@
 - assets/wall-before.webp / wall-after.webp — 落地实景照片(店面前后对比,**入库**)
 - tools/serve_debug.py — 本地服务器 + /shot /diag 调试接口
 - tools/prepare_particles.py — GLB → particles.bin 预采样脚本
-- tools/verify.js — 多视口浏览器回归验证(Playwright + 系统 Edge 的 msedge 通道)
-- tools/shot-realwall.js — 落地实景全流程交互验证(桌面开/Esc/背景/大图 + 手机)
+- tools/verify.js — 多视口浏览器回归验证(Playwright + 系统 Edge 的 msedge 通道;
+  含每视口开一次擦除舞台的几何断言:两图加载/mask 生效/补偿落到布局/舞台不溢出)
+- tools/shot-realwall.js — 落地实景「擦除对比」全流程交互验证(两入口/滚轮/键盘/
+  触摸/Esc/背景/两图加载/粒子守卫+对照组;桌面 1600×900 + 手机 390×844)
+- **两个测试脚本都支持 RW_LOCAL=1**:发布前新 tag 未推出时,由测试侧拦截 CDN 用工作区
+  文件应答(importmap 无法表达回退,否则 three 404 → 整页起不来,verify 直接超时)。
+  不设该变量走真实链路,发布后的线上回归用默认模式。
 - PROJECT_STATUS.md — 项目状态与执行记录(需求/资产/验收/问题-修复-复测表)
 - shots/ — 验证截图与报告(不入库)
 - (tools/final-check.js、time-load.js 已删:验证对象与职责已被 verify.js 吸收)
@@ -66,16 +71,30 @@
   (请求不成功也不失败、onerror 永不触发,本项目多次实测)→ 8s 未成功则换本地
   相对路径重试(clearTimeout 于 onload/onerror;本地再失败才回退色板)。
 
-### 落地实景(realwall,店面前后对比照片)
-- config.realwall 数组(路径+图注)→ 缩略图 button(.realwall-thumb,aria-label)注入
-  #realwall-thumbs;index.html 静态写好 #realwall-overlay(硬编码 2 个 .realwall-fig)。
-- 大图查看器:缩略图点击 → overlay(role=dialog aria-modal,焦点移到关闭钮);
-  Esc/背景点击/关闭钮关闭,关闭后焦点还原触发按钮。
+### 落地实景(realwall,店面前后「擦除对比」,v1.8 起)
+- config.realwall 是**对象**{before, after, align, feather, wheelStep, touchDistance}
+  → 缩略图 button(.realwall-thumb,aria-label)仍注入 #realwall-thumbs;
+  index.html 静态写好 #realwall-overlay(单张 .realwall-stage,内嵌 .realwall-frame
+  叠放 #realwall-before/#realwall-after 两图)。**v1.7 的 .realwall-fig 双图结构已废弃。**
+- 擦除对比:before 在文档流撑开画框,after 绝对定位叠上层,靠 mask 横向渐变揭示。
+  `--wipe-edge` 0→1;擦除进度写在 overlay 的 **dataset.wipe**(供测试读,别去解析
+  mask 字符串)。三驱动:滚轮(deltaY×wheelStep)/触摸(竖向位移映射横向)/
+  键盘(←→ 各 0.08、Esc 关闭、Tab 焦点圈定)。缩略图两个入口:点「改造前」从
+  wipe=0 进,点「落地后」从 wipe=1 进。
+- **对齐补偿必须走 config,不在 CSS 里改**:JS 把 align 折算成 --rw-scale /
+  --rw-offset-y / --rw-feather 注入 overlay 的 CSS 变量(CSS 内 var() 默认值只是兜底)。
+  源图宽高比不同(before 912×1148 / after 1000×1275),scale 定义在"渲染宽之比"上,
+  **改 before/after 源图必须重新量 align**,详见 showcase-config.js 的 realwall.align 注释。
+- **羽化带是承重结构不是装饰**:硬接缝处仍留 1-4px 残余错位(before 横线自身还有
+  ~1.9° 倾斜,scale+offset 校正不了旋转),靠 6% 羽化盖掉;换 clip-path / 调小 feather
+  会把残余暴露成可见镶边。
 - **交互守卫**:overlay 打开期间(realwallIsOpen)滚轮/触摸手势不得触发粒子消散。
+  这条由 shot-realwall.js 断言(读 window.__flow.phase),且配了对照组(关掉 overlay
+  后同样滚轮必须能消散/回升)防假绿。
 - CDN 失败回退与照片同构:error 事件 + 8s 挂起超时,dataset 标记防死循环
   (attachRealwallFallback,缩略图与大图共用)。
-- **加第 3 张实景图必须同步**:config.realwall 加条目 + index.html overlay 加一个
-  .realwall-fig 结构 + 确认 CSS 排布(桌面双图/竖屏上下堆叠)。
+- **要加/换实景图**:改 config.realwall 的 before/after(两张需同机位)→ 重新测 align
+  → 复跑 shot-realwall.js 与 verify.js(两图加载、mask 生效、舞台不溢出、尺寸比断言)。
 
 ### 拖拽旋转(showcase.js 的 dragRot)
 - pointerdown 按下 → pointermove 累计 angle(dx × 0.006) → 按住时暂停自转
@@ -148,13 +167,16 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
 
 ## 验证清单(改动后必须做)
 1. `node --check showcase.js && node --check showcase-config.js`
-2. 本地服务器跑起来,Playwright 打开验证:
-   - `node tools/shot-realwall.js`(实景图桌面开/Esc/背景/大图加载 + 手机)
-   - `node tools/verify.js`(多视口布局回归,~4 分钟;内含 errorVisible
+2. 本地服务器跑起来(`python tools/serve_debug.py 8137`),Playwright 打开验证
+   (**发布前**先加 `RW_LOCAL=1`,否则新 tag 未推出 → three 404 → 整页起不来):
+   - `RW_LOCAL=1 node tools/shot-realwall.js`(擦除对比全流程 + 粒子守卫/对照组)
+   - `RW_LOCAL=1 node tools/verify.js`(多视口布局回归,~2 分钟;内含 errorVisible
      断言——看门狗 error 面板出现即判失败,杜绝"面板后假绿";v1.7 起静止态
      契约:waitBody 等打字机 103 字打满再采集,收容断言=桌面缩略图底
-     ≥ barTop−8、meta 底 ≤ 视口高、手机 features 底 ≤ 376 且字号 ≥ 11/10/12)
-   - 交互流程:进入升起→稳定→滚轮消散→反向回升(对比像素分布)
+     ≥ barTop−8、meta 底 ≤ 视口高、手机 features 底 ≤ 376 且字号 ≥ 11/10/12;
+     v1.8 起每个视口开一次擦除舞台,断言 after 宽 = before×1.015、纵向偏移
+     = 0.6969%×before 高、舞台整体不溢出视口)
+   - 交互流程:进入升起→稳定→滚轮消散→反向回升(由 shot-realwall.js 对照组覆盖)
 3. 控制台零错误(pageerror 监听)
 4. 粒子数 = 90000(console 日志"实际粒子数量";bin 校验 = 90000)
 5. 视觉抽查:用 ai-router 的 Kimi 视觉模型看截图(Read 图片经常显示失败,
@@ -252,6 +274,20 @@ git tag v1.6 && git push origin v1.6 && git push origin master
 18. 回退链给 img.src 重新赋值(CDN→本地)会 abort 旧请求,其迟到的 error 事件
     仍会触发——新资源的 onerror 要防"旧请求迟到 error 误判新资源失败"
     (errCount 首错忽略/比对 src)
+19. **测试里别按秒断言粒子缓动**:帧循环 `dt = Math.min(0.1, ...)` 有 100ms 上限,
+   而 headless 软件渲染(--disable-gpu)跑 9 万粒子 <10fps 时 dt 帧帧触顶 →
+    实测消散 2.6s 只走完 0.8、回升 2.8s 只走完 0.66,**是测试环境产物不是产品缺陷**
+    (真机 30fps+ 不触顶,标称 0.45/0.5 每秒成立)。一律用 waitForFunction 等状态,
+    别用 waitForTimeout 等时间
+20. **发布前跑测试必须 RW_LOCAL=1**:index.html 的 importmap 把 three 指向 CDN 版本
+    tag,而 importmap **无法表达回退**(showcase.js/config/图片都有本地回退,唯独
+    它没有)→ 新 tag 未推出时 three 404,整页起不来,verify.js 只表现为 waitForReady
+    超时 180s,看不出根因。兜底放测试侧(拦截 CDN 用工作区文件应答),不改生产代码
+21. 实景图对齐补偿**不能靠自动化测量复核**:before/after 是"毛坯墙 → 满墙彩绘",
+    共同结构太少——梯度 MAE 全网格只差 ±0.4%(不可分辨)、SAD 与 1D 剖面搜索的
+    最优解都钉在搜索边界、NCC 峰值弱且各带乱跳(0.22-0.60)。视觉模型也只对相对
+    判断可靠(本轮它把故意错位的对照图判成"最自然",不能当基准)。结论:保持
+    config 里那组实测值不动,残余错位由羽化盖住;**要改必须先有新的可靠测量方法**
 
 ## 文案/参数修改入口(showcase-config.js)
 - 文案:categoryEn/titleZh/aliasEn/introZh/introSubZh/bodyZh/features/palette/craftTags
@@ -278,3 +314,12 @@ git tag v1.6 && git push origin v1.6 && git push origin master
   error)+ 打字完成光标停闪 + --body-subtle 对比 4.7:1 + 死代码清理。verify.js
   静止态契约(waitBody 103 字 + 收容/字号断言)。发布:tag v1.7,push tag →
   master,预热后线上验证全绿。
+- v1.8(tag,2026-09-12):落地实景从「双图并排大图查看器」改造为**滚动擦除前后
+  对比**——单舞台两图叠放 + mask 羽化揭示(feather 6% 承重,盖掉 1-4px 残余错位)、
+  三驱动(滚轮/触摸竖向映射/键盘 ←→)、两个入口(「改造前」=0 / 「落地后」=1)、
+  实测对齐补偿(config.realwall.align,见该处注释)、prefers-reduced-motion。
+  测试:v1.7 遗留的 verify.js 从来看不出这次改动(它只断言缩略图 2/2),本轮补
+  **每视口舞台几何断言**(实测宽比 1.0150/纵向偏移 = 0.6969%×h,五视口全中)+
+  **RW_LOCAL 发布前模式**(此前发布前根本跑不了 verify,importmap 无回退);
+  shot-realwall.js 重写为擦除全流程(24 项)并新增 **粒子消散守卫 + 对照组**
+  (读 window.__flow.phase 钩子;对照组的必要性见已知坑 19)。

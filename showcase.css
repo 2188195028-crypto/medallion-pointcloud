@@ -316,16 +316,17 @@ body {
   outline-offset: 2px;
 }
 
-/* 大图查看器:全屏遮罩,左右并排两图(竖屏上下堆叠) */
+/* 擦除对比舞台:全屏遮罩内单张舞台,两图叠放(before 打底 / after 上层被擦除揭示) */
 /* 注意:必须有 [hidden] display:none,否则 flex 会覆盖 hidden 导致遮罩常驻(同 #error 的坑) */
 #realwall-overlay {
   position: fixed;
   inset: 0;
   z-index: 8;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: clamp(20px, 4vw, 56px);
+  gap: clamp(12px, 2.4vh, 24px);
   padding: clamp(16px, 4vh, 48px);
   background: rgba(16, 25, 23, 0.96);
   opacity: 0;
@@ -340,7 +341,14 @@ body {
   display: none;
 }
 
-.realwall-fig {
+/* 减少动态偏好:遮罩不再淡入,直接出现(擦除本身是直接拖动的,无动画可关) */
+@media (prefers-reduced-motion: reduce) {
+  #realwall-overlay {
+    transition: none;
+  }
+}
+
+.realwall-stage {
   margin: 0;
   display: flex;
   flex-direction: column;
@@ -349,19 +357,67 @@ body {
   min-width: 0;
 }
 
-.realwall-fig img {
+/* 画框尺寸由 before 在文档流内撑开,after 绝对定位叠上去不参与撑高。
+   after 放大 1.015 后比画框高约 2.8%,底部溢出由 overflow 裁掉——
+   落在画面最底部的灰地砖上,视觉无损(见 config.realwall.align 注释) */
+.realwall-frame {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(239, 230, 207, 0.35);
+  line-height: 0;
+}
+
+.realwall-img {
   display: block;
   max-width: min(38vw, 520px);
   max-height: 76vh;
-  object-fit: contain;
-  border: 1px solid rgba(239, 230, 207, 0.35);
+  width: auto;
+  height: auto;
 }
 
-.realwall-fig figcaption {
+/* 对齐补偿与羽化参数全部由 JS 从 config 注入(--rw-scale / --rw-offset-y / --rw-feather),
+   此处 var() 默认值只是兜底,与 config 保持一致——改补偿值改 config,别改这里。
+   百分比写法让补偿随舞台自适应缩放,不写死 px。 */
+.realwall-img--after {
+  position: absolute;
+  top: var(--rw-offset-y, 0.697%);
+  left: calc((100% - var(--rw-scale, 101.5%)) / 2);
+  width: var(--rw-scale, 101.5%);
+  max-width: none;
+  max-height: none;
+  /* 羽化揭示:渐变首尾颜色会向两端自动延伸,所以只写两个端点即可——
+     edge 左侧是实心黑(after 完全显示),右侧是透明(完全隐藏)。
+     JS 把 --wipe-edge 映射到 [-feather, 1+feather] 区间,保证 0/1 两端无半透明残留。 */
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(var(--wipe-edge, -6%) - var(--rw-feather, 6%)),
+    transparent calc(var(--wipe-edge, -6%) + var(--rw-feather, 6%))
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(var(--wipe-edge, -6%) - var(--rw-feather, 6%)),
+    transparent calc(var(--wipe-edge, -6%) + var(--rw-feather, 6%))
+  );
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.realwall-stage figcaption {
   font-family: var(--font-serif);
   font-size: calc(13px * var(--layout-scale));
   letter-spacing: 0.18em;
   color: var(--body-secondary);
+  text-align: center;
+}
+
+/* 操作提示:默认无人在遮罩内预期滚轮有效,不给提示这个功能就是隐形的 */
+.realwall-hint {
+  font-family: var(--font-sans);
+  font-size: calc(12px * var(--layout-scale));
+  letter-spacing: 0.2em;
+  color: var(--body-subtle);
   text-align: center;
 }
 
@@ -537,10 +593,11 @@ body {
   #features li {
     font-size: max(calc(var(--fs-feature) * var(--layout-scale)), 12px);
   }
-  .realwall-fig figcaption {
+  .realwall-stage figcaption,
+  .realwall-hint {
     font-size: max(calc(13px * var(--layout-scale)), 10px);
   }
-  /* 落地实景:缩略图按视口宽取值(layout-scale 在窄屏下太小),大图上下堆叠。
+  /* 落地实景:缩略图按视口宽取值(layout-scale 在窄屏下太小)。
      realwall 区随桌面基础规则走横排(label 与缩略图同行),省出原竖排
      label 行高,对冲上方字号下限带来的增高 */
   .realwall-thumb img {
@@ -548,11 +605,11 @@ body {
     height: 15vw;
   }
   #realwall-overlay {
-    flex-direction: column;
     gap: 14px;
     overflow-y: auto;
   }
-  .realwall-fig img {
+  /* 舞台按 before 定尺寸,after 百分比跟随缩放,竖屏只需压 before 的框 */
+  .realwall-img--before {
     max-width: 78vw;
     max-height: 36vh;
   }

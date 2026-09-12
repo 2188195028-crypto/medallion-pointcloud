@@ -10,9 +10,13 @@
    加载耗时、零 pageerror/error、竖屏 order(meta 在正文上方)、无横向溢出、
    桌面缩略图底不压底栏(≥8px 空距)、meta 底不超视口、手机字号下限
    (正文≥11/标签≥10/特征词≥12)与 features 底不越稠密盘线(≤376)。
+   v1.8 新增(擦除对比舞台):每个视口都开一次 overlay,断言两图加载、mask 渐变
+   已生效、对齐补偿变量注入值、after 的实测布局确实 = before×1.015 且纵向偏移
+   0.6969%、舞台+图注+提示整体不溢出错出视口。
    输出:shots/verify-*.png + shots/verify-report.json;阻断断言失败退出码 1。
    用法:先起服务器 python tools/serve_debug.py 8137,再 node tools/verify.js
-   作者:Ligong-Wenchang  日期:2026-09-05(重写:msedge 通道 + 纯交互模式 + realwall;v1.7:静止态断言)
+        (发布前 tag 未推出时加 RW_LOCAL=1,由测试侧应答 CDN)
+   作者:Ligong-Wenchang  日期:2026-09-05(重写:msedge 通道 + 纯交互模式 + realwall;v1.7:静止态断言;v1.8:舞台几何断言)
    ============================================================ */
 const { chromium } = require("playwright-core");
 const path = require("path");
@@ -21,6 +25,40 @@ const fs = require("fs");
 const BASE = "http://127.0.0.1:8137/";
 const SHOTS = path.join(__dirname, "..", "shots");
 fs.mkdirSync(SHOTS, { recursive: true });
+
+// ---- 发布前本地模式(RW_LOCAL=1) ----
+// 起因同 shot-realwall.js:index.html 的 importmap 把 three 指向 CDN 版本 tag,而发布前
+// 新 tag 尚不存在 → three 404。showcase.js/config/图片都有本地回退,**唯独 importmap
+// 没有**(importmap 无法表达回退),于是整页起不来 —— 这正是发布前跑 verify 的必经状态。
+// 兜底放测试侧(不改生产代码):拦截 CDN,用工作区文件应答。
+// 不设本变量时走真实链路,发布后的线上回归用默认模式。
+const LOCAL = process.env.RW_LOCAL === "1";
+const MIME = {
+  ".js": "text/javascript",
+  ".css": "text/css",
+  ".html": "text/html",
+  ".webp": "image/webp",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".bin": "application/octet-stream",
+  ".json": "application/json",
+};
+
+async function installLocalCdn(ctx) {
+  if (!LOCAL) return;
+  await ctx.route("**/cdn.jsdelivr.net/**", async (route) => {
+    const m = route.request().url().match(/medallion-pointcloud@[^/]+\/(.+)$/);
+    if (!m) return route.continue();
+    const rel = decodeURIComponent(m[1].split("?")[0]);
+    const file = path.join(__dirname, "..", rel);
+    if (!fs.existsSync(file)) return route.fulfill({ status: 404, body: "" });
+    route.fulfill({
+      status: 200,
+      contentType: MIME[path.extname(file).toLowerCase()] || "application/octet-stream",
+      body: fs.readFileSync(file),
+    });
+  });
+}
 
 const logs = []; // [viewport组][type] 文本
 const fails = []; // 阻断断言失败记录
@@ -73,6 +111,78 @@ async function waitThumbsSettle(page, group, ms) {
   } catch {
     record(group, "warn", "缩略图 20s 未 settle(CDN 上游挂起)");
   }
+}
+
+// v1.8 擦除对比舞台:开 overlay → 等两图加载 → 采舞台几何 → 截图 → Esc 关。
+// 舞台是 fixed inset:0 且不滚动,内容一旦超过视口只会被裁掉,所以"整体不溢出"
+// 是必须显式断言的(与 v1.6 缩略图压底栏同类的视口相关断裂)。
+async function checkOverlay(page, group, name, mobile = false) {
+  const shot = path.join(SHOTS, `verify-overlay-${name}.png`);
+  const first = page.locator(".realwall-thumb").first();
+  if (mobile) await first.tap();
+  else await first.click();
+  await page.waitForTimeout(700);
+  let bothLoaded = true;
+  try {
+    await page.waitForFunction(
+      () =>
+        ["realwall-before", "realwall-after"].every(
+          (id) => document.getElementById(id).naturalWidth > 0
+        ),
+      null,
+      { timeout: 20000 }
+    );
+  } catch {
+    bothLoaded = false;
+  }
+  const ov = await page.evaluate(() => {
+    const q = (s) => document.querySelector(s);
+    const rect = (el) => {
+      const b = el.getBoundingClientRect();
+      return {
+        top: +b.top.toFixed(2),
+        left: +b.left.toFixed(2),
+        right: +b.right.toFixed(2),
+        bottom: +b.bottom.toFixed(2),
+        w: +b.width.toFixed(2),
+        h: +b.height.toFixed(2),
+      };
+    };
+    const overlay = q("#realwall-overlay");
+    const frame = q(".realwall-frame");
+    const before = q("#realwall-before");
+    const after = q("#realwall-after");
+    const acs = getComputedStyle(after);
+    const ocs = getComputedStyle(overlay);
+    return {
+      opened: !overlay.hidden,
+      wipe: parseFloat(overlay.dataset.wipe ?? "NaN"),
+      maskImage: (acs.maskImage || acs.webkitMaskImage || "").slice(0, 60),
+      alignScale: ocs.getPropertyValue("--rw-scale").trim(),
+      alignOffsetY: ocs.getPropertyValue("--rw-offset-y").trim(),
+      alignFeather: ocs.getPropertyValue("--rw-feather").trim(),
+      frameOverflow: getComputedStyle(frame).overflow,
+      beforeLoaded: before.naturalWidth > 0,
+      afterLoaded: after.naturalWidth > 0,
+      viewport: [window.innerWidth, window.innerHeight],
+      scroll: [document.documentElement.scrollWidth, document.documentElement.scrollHeight],
+      stage: rect(q(".realwall-stage")),
+      frame: rect(frame),
+      before: rect(before),
+      after: rect(after),
+      hint: rect(q(".realwall-hint")),
+      caption: (q("#realwall-caption").textContent || "").trim(),
+    };
+  });
+  ov.bothLoaded = bothLoaded;
+  record(group, "info", `overlay@${name}: ${JSON.stringify({
+    wipe: ov.wipe, before: ov.before.w, after: ov.after.w, mask: !!ov.maskImage,
+  })}`);
+  await page.screenshot({ path: shot });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+  ov.closedByEsc = await page.evaluate(() => document.getElementById("realwall-overlay").hidden);
+  return ov;
 }
 
 async function collect(page) {
@@ -179,6 +289,7 @@ async function main() {
   // ---------- A) 动态 resize 组 ----------
   {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    await installLocalCdn(ctx);
     const page = await makePage(ctx, "A");
     const t0 = Date.now();
     // 不冻结时间线(?t=5.2 会停在打字完成前一刻,waitBody 等不到 103 字):
@@ -189,28 +300,33 @@ async function main() {
     record("A", "info", `goto→ready 总耗时 ${Date.now() - t0}ms`);
     await page.screenshot({ path: path.join(SHOTS, "verify-1280x720.png") });
     report["1280x720"] = await collect(page);
+    report["1280x720"].overlay = await checkOverlay(page, "A", "1280x720");
 
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.waitForTimeout(1800);
     await page.screenshot({ path: path.join(SHOTS, "verify-1920x1080.png") });
     report["1920x1080"] = await collect(page);
+    report["1920x1080"].overlay = await checkOverlay(page, "A", "1920x1080");
 
     await page.setViewportSize({ width: 2560, height: 1440 });
     await page.waitForTimeout(1800);
     await page.screenshot({ path: path.join(SHOTS, "verify-2560x1440.png") });
     report["2560x1440"] = await collect(page);
+    report["2560x1440"].overlay = await checkOverlay(page, "A", "2560x1440");
     await ctx.close();
   }
 
   // ---------- B) 1366×768 静态 ----------
   {
     const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+    await installLocalCdn(ctx);
     const page = await makePage(ctx, "B");
     await page.goto(BASE + "?v=9&nowatchdog=1", { timeout: 180000 });
     await waitForReady(page, "B", true);
     await waitThumbsSettle(page, "B", 20000);
     await page.screenshot({ path: path.join(SHOTS, "verify-1366x768.png") });
     report["1366x768"] = await collect(page);
+    report["1366x768"].overlay = await checkOverlay(page, "B", "1366x768");
     await ctx.close();
   }
 
@@ -218,6 +334,7 @@ async function main() {
   report.states = {};
   for (const t of [0, 5.2]) {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    await installLocalCdn(ctx);
     const page = await makePage(ctx, `C-t${t}`);
     await page.goto(BASE + `?t=${t}&v=t${t}&nowatchdog=1`, { timeout: 180000 });
     await waitForReady(page, `C-t${t}`);
@@ -238,11 +355,13 @@ async function main() {
       deviceScaleFactor: 2,
     });
     const page = await makePage(ctx, "D");
+    await installLocalCdn(ctx);
     await page.goto(BASE + "?v=m&nowatchdog=1", { timeout: 180000 });
     await waitForReady(page, "D", true);
     await waitThumbsSettle(page, "D", 20000);
     await page.screenshot({ path: path.join(SHOTS, "verify-390x844.png") });
     report["390x844"] = await collect(page);
+    report["390x844"].overlay = await checkOverlay(page, "D", "390x844", true);
     await ctx.close();
   }
 
@@ -289,6 +408,50 @@ async function main() {
       if (c.fsBody < 10.9) fails.push(`${name} 手机正文字号 ${c.fsBody}px < 11px 下限`);
       if (c.fsLabel < 9.9) fails.push(`${name} 手机标签字号 ${c.fsLabel}px < 10px 下限`);
       if (c.fsFeatureLi < 11.9) fails.push(`${name} 手机特征词字号 ${c.fsFeatureLi}px < 12px 下限`);
+    }
+    // ---- v1.8 擦除对比舞台断言 ----
+    if (c.overlay) {
+      const o = c.overlay;
+      const vw = o.viewport[0];
+      const vh = o.viewport[1];
+      if (!o.opened) fails.push(`${name} overlay 未打开`);
+      if (!o.bothLoaded || !o.beforeLoaded || !o.afterLoaded) {
+        fails.push(`${name} 擦除舞台两图未加载完成(before=${o.beforeLoaded} after=${o.afterLoaded})`);
+      }
+      if (!o.maskImage.includes("gradient")) fails.push(`${name} after 图层 mask 渐变未生效`);
+      if (
+        o.alignScale !== "101.500%" ||
+        o.alignOffsetY !== "0.6969%" ||
+        o.alignFeather !== "6.000%"
+      ) {
+        fails.push(
+          `${name} 对齐补偿变量异常: ${o.alignScale}/${o.alignOffsetY}/${o.alignFeather}`
+        );
+      }
+      if (o.frameOverflow !== "hidden") {
+        fails.push(`${name} 画框未裁切(overflow=${o.frameOverflow}),after 放大后会外溢`);
+      }
+      // 舞台整体必须在视口内(overlay fixed 且不滚动,溢出即被裁掉)
+      if (o.stage.top < -1 || o.stage.left < -1 || o.stage.right > vw + 1 || o.hint.bottom > vh + 1) {
+        fails.push(
+          `${name} 舞台溢出视口: stage(${o.stage.left},${o.stage.top})-(${o.stage.right},${o.stage.bottom}) hint 底 ${o.hint.bottom} vs ${vw}×${vh}`
+        );
+      }
+      // 补偿必须落到实际布局(不只看变量字符串):after 宽 = before×1.015,顶边下移 0.6969%×before 高
+      const wRatio = o.after.w / o.before.w;
+      if (Math.abs(wRatio - 1.015) > 0.004) {
+        fails.push(`${name} after 宽度比实测 ${wRatio.toFixed(4)} ≠ 1.015(补偿未落到布局)`);
+      }
+      const dy = o.after.top - o.before.top;
+      const dyExpect = 0.006969 * o.before.h;
+      if (Math.abs(dy - dyExpect) > 2) {
+        fails.push(
+          `${name} after 纵向偏移实测 ${dy.toFixed(2)}px ≠ 期望 ${dyExpect.toFixed(2)}px`
+        );
+      }
+      if (o.wipe !== 0) fails.push(`${name} 从「改造前」进入的初始进度应为 0,实测 ${o.wipe}`);
+      if (!o.closedByEsc) fails.push(`${name} overlay Esc 未关闭`);
+      if (o.scroll[0] > vw + 1) fails.push(`${name} overlay 打开时横向溢出 ${o.scroll[0]} > ${vw}`);
     }
   }
   if (!particleOk) fails.push("粒子数日志未确认 = 90000");

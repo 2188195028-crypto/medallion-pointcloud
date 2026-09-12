@@ -51,12 +51,43 @@ export default {
   ],
   craftTags: ["描金", "回纹", "工笔", "重彩"],
 
-  // ---- 落地实景(汉中福地茶业店面墙绘前后对比,点击缩略图看大图) ----
-  // 照片需随仓库入库(与 reference.jpg 同理,CDN 部署后线上可看)。
-  realwall: [
-    { path: "assets/wall-before.webp", caption: "改造前 · 店面原始墙面" },
-    { path: "assets/wall-after.webp", caption: "落地后 · 上墙效果" },
-  ],
+  // ---- 落地实景(汉中福地茶业店面墙绘:滚动擦除前后对比) ----
+  // 一对**同机位**照片:before 打底,after 叠在上层,由 --wipe-edge 控制横向揭示宽度。
+  // 两张缩略图都保留:点「改造前」从 wipe=0 进门(空墙),点「落地后」从 wipe=1 进门,
+  // 之后滚轮 / 上滑 / 方向键任意擦除。照片需随仓库入库(与 reference.jpg 同理)。
+  realwall: {
+    before: { path: "assets/wall-before.webp", caption: "改造前 · 店面原始墙面" },
+    after: { path: "assets/wall-after.webp", caption: "落地后 · 上墙效果" },
+    // 对齐补偿(**实测值,不是估算;不得凭感觉改**)——两张为手持拍摄,after 需放大
+    // 并下移才与 before 咬合,否则擦除时线条会跳。首轮测量:梯度幅值图在 scale×offset
+    // 网格上搜索,最优解 scale=1.015 / dx=0 / dy=8px(912×1148 基准),MAE 3.08→2.49。
+    // dx=0(水平天然对齐)是横向擦除可行的前提;dy 折算为 before 高度的比例。
+    //
+    // **两个源图宽高比不同**(before 912×1148=1.2588,after 1000×1275=1.2750):
+    // scale 定义在"after 渲染宽 / before 渲染宽"上,height:auto → after 整体等比缩放
+    // 1.015(相对 before 宽度);相对 before **高度**的等效纵向比例是
+    // 1.015×1.2750/1.2588 = 1.0281,这是宽高比差异的**结果**,不是额外拉伸。
+    // 改 before/after 源图尺寸时这两个数会一起变,别只改 scale。
+    //
+    // 残余错位:硬接缝下横向腰线在接缝处仍有竖向错位(before 自身横线还有 ~1.9° 倾斜,
+    // scale+offset 校不了旋转)。**羽化(见下)就是用来盖掉这段残余的**——去掉羽化或
+    // 换 clip-path 会把它暴露成一条可见镶边。(实测那 1.9° 是量出来的;残余错位的
+    // 具体像素数只有视觉模型给过 1-4px 的估计,该数字不可靠,只取"存在且方向偏纵向"。)
+    // 2026-09-12 独立复测:梯度 MAE 全网格仅 7.118-7.145(±0.4%,不可分辨)、
+    // SAD/1D 剖面/NCC 三种方法的最优解都钉在搜索边界 —— 该图对"涂装前后内容全变、
+    // 无共同可追踪结构",**自动化方法无法独立确认也无法推翻本组数值**,故保持原值不动。
+    align: {
+      scale: 1.015,
+      offsetYRatio: 8 / 1148, // = 0.00697
+    },
+    // 擦除边缘羽化带宽度(舞台宽度的比例)。用 mask 渐变而非 clip-path 的理由:
+    // 货架边缘残留 2-3px 错位镶边,只有羽化能把它藏掉。
+    feather: 0.06,
+    // 滚轮灵敏度:每 1px deltaY 推进的揭示进度(一格滚轮 ≈ deltaY 100 → 约 0.18)
+    wheelStep: 0.0018,
+    // 触摸:整段滑动距离 = 视口高度的这个比例时,推进满进度
+    touchDistance: 0.5,
+  },
 
   // ---- 模型 ----
   // mode="data"：加载预采样粒子数据(assets/particles.bin，1.98MB/90000 粒子，秒开，GitHub Pages 部署用)
@@ -67,7 +98,7 @@ export default {
   // 粒子数据 CDN 镜像:GitHub Pages 在国内网络下载 bin 极慢(实测 27-45KB/s,
   // 1.98MB 需 70s+),jsDelivr 国内节点 ~2s。15s 超时失败自动回退本地。
   // 用版本 tag(v1.1)而非 @master:不可变 URL 缓存永久生效,推送新 commit 不失效。
-  cdnBase: "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.7/",
+  cdnBase: "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.8/",
   // 参考照片(粒子取色源):模型贴图与照片四季布局不一致(照片左侧为黛蓝雪山、
   // 右上为朱红秋山,模型贴图缺失这些色域),按粒子盘面位置采样照片像素,
   // 保证渲染颜色布局与照片一致。照片 232KB,需随仓库入库(GitHub Pages)。

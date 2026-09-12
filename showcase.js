@@ -102,11 +102,21 @@ config.craftTags.forEach((tag) => {
   tagsEl.appendChild(li);
 });
 
-// ---------- 落地实景(店面前后对比照片,点击缩略图看大图) ----------
+// ---------- 落地实景(店面墙绘:滚动擦除前后对比) ----------
 // 资源路径与粒子数据同规则:CDN 优先,失败回退本地相对路径。
 // (新 tag 发布前 CDN 上尚无 webp,无回退会 404 裂图——与照片取色二级回退同理)
 const realwallThumbsEl = document.getElementById("realwall-thumbs");
 const realwallOverlayEl = document.getElementById("realwall-overlay");
+const realwallBeforeEl = document.getElementById("realwall-before");
+const realwallAfterEl = document.getElementById("realwall-after");
+const realwallCaptionEl = document.getElementById("realwall-caption");
+
+const REALWALL = config.realwall || {};
+const RW_BEFORE = REALWALL.before;
+const RW_AFTER = REALWALL.after;
+const RW_FEATHER = typeof REALWALL.feather === "number" ? REALWALL.feather : 0.06;
+const RW_WHEEL_STEP = typeof REALWALL.wheelStep === "number" ? REALWALL.wheelStep : 0.0018;
+const RW_TOUCH_DIST = typeof REALWALL.touchDistance === "number" ? REALWALL.touchDistance : 0.5;
 
 function realwallAssetUrl(path) {
   return config.cdnBase ? config.cdnBase + path : path;
@@ -132,10 +142,45 @@ function realwallIsOpen() {
   return !!realwallOverlayEl && !realwallOverlayEl.hidden;
 }
 
+// ---- 擦除进度 ----
+// realwallWipe:0 = 全「改造前」,1 = 全「落地后」。直接跟随输入,不做缓动
+// (缓动会让滚轮擦除有滞后感,这个效果的手感全靠"跟手")。
+let realwallWipe = 0;
+
+// 进度 → mask 端点位置。羽化带会把端点推出 0-100% 区间,而 CSS 渐变的首尾颜色
+// 会向两端自动延伸,所以 --wipe-edge 必须映射到 [-feather, 1+feather]:
+// p=0 时端点正好落在 0%(全透明 → after 完全不显);p=1 落在 100%(全黑 → 全显)。
+// 若直接把 p 当端点,0/1 两端会各留一条半透明带(渐变在端点处只插值到一半)。
+function realwallEdgePercent(p) {
+  return (p * (1 + 2 * RW_FEATHER) - RW_FEATHER) * 100;
+}
+
+function setRealwallWipe(p) {
+  realwallWipe = Math.max(0, Math.min(1, p));
+  if (!realwallOverlayEl) return;
+  realwallOverlayEl.style.setProperty(
+    "--wipe-edge",
+    realwallEdgePercent(realwallWipe).toFixed(3) + "%"
+  );
+  // 供验证脚本读取(shot-realwall/verify 断言擦除进度用),免得测试去解析 mask 字符串
+  realwallOverlayEl.dataset.wipe = realwallWipe.toFixed(4);
+  if (realwallCaptionEl) {
+    realwallCaptionEl.textContent =
+      realwallWipe < 0.5 ? RW_BEFORE.caption : RW_AFTER.caption;
+  }
+  // 被完全遮住的那张不该被读屏播报
+  if (realwallAfterEl) {
+    if (realwallWipe <= 0.001) realwallAfterEl.setAttribute("aria-hidden", "true");
+    else realwallAfterEl.removeAttribute("aria-hidden");
+  }
+}
+
 let realwallLastFocus = null;
-function openRealwall() {
+function openRealwall(startWipe) {
   if (!realwallOverlayEl || !realwallOverlayEl.hidden) return;
   realwallLastFocus = document.activeElement;
+  // 先定进度再显示,否则会闪一帧错误状态
+  setRealwallWipe(typeof startWipe === "number" ? startWipe : 0);
   realwallOverlayEl.hidden = false;
   requestAnimationFrame(() => realwallOverlayEl.classList.add("show"));
   const closeBtn = document.getElementById("realwall-close");
@@ -152,47 +197,101 @@ function closeRealwall() {
   realwallLastFocus = null;
 }
 
-if (realwallThumbsEl && realwallOverlayEl && Array.isArray(config.realwall)) {
-  // 缩略图按钮
-  config.realwall.forEach((p) => {
+if (realwallThumbsEl && realwallOverlayEl && RW_BEFORE && RW_AFTER) {
+  // 对齐补偿与羽化带宽从 config 注入 CSS(改补偿值改 config,不改 CSS——
+  // 与文字布局同规矩)。百分比写法让补偿随舞台自适应,不写死 px。
+  const rwAlign = REALWALL.align || {};
+  const rwScale = typeof rwAlign.scale === "number" ? rwAlign.scale : 1;
+  const rwOffsetY = typeof rwAlign.offsetYRatio === "number" ? rwAlign.offsetYRatio : 0;
+  realwallOverlayEl.style.setProperty("--rw-scale", (rwScale * 100).toFixed(3) + "%");
+  realwallOverlayEl.style.setProperty("--rw-offset-y", (rwOffsetY * 100).toFixed(4) + "%");
+  realwallOverlayEl.style.setProperty("--rw-feather", (RW_FEATHER * 100).toFixed(3) + "%");
+
+  // 舞台两图:before 打底,after 叠在上层被 mask 揭示(结构在 index.html 静态写好)
+  if (realwallBeforeEl) {
+    realwallBeforeEl.src = realwallAssetUrl(RW_BEFORE.path);
+    attachRealwallFallback(realwallBeforeEl, RW_BEFORE.path);
+    realwallBeforeEl.alt = RW_BEFORE.caption;
+  }
+  if (realwallAfterEl) {
+    realwallAfterEl.src = realwallAssetUrl(RW_AFTER.path);
+    attachRealwallFallback(realwallAfterEl, RW_AFTER.path);
+    realwallAfterEl.alt = RW_AFTER.caption;
+  }
+  setRealwallWipe(0);
+
+  // 缩略图:点「改造前」从 wipe=0 进门(空墙),点「落地后」从 wipe=1 进门。
+  // 两个入口共用同一舞台,主页面布局零改动(v1.7 收容成果不动)
+  [
+    { item: RW_BEFORE, start: 0 },
+    { item: RW_AFTER, start: 1 },
+  ].forEach(({ item, start }) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "realwall-thumb";
-    btn.setAttribute("aria-label", "查看实景照片:" + p.caption);
+    btn.setAttribute("aria-label", "查看实景照片:" + item.caption);
     const img = document.createElement("img");
-    img.src = realwallAssetUrl(p.path);
-    attachRealwallFallback(img, p.path);
-    img.alt = p.caption;
+    img.src = realwallAssetUrl(item.path);
+    attachRealwallFallback(img, item.path);
+    img.alt = item.caption;
     img.loading = "lazy";
     btn.appendChild(img);
-    btn.addEventListener("click", openRealwall);
+    btn.addEventListener("click", () => openRealwall(start));
     realwallThumbsEl.appendChild(btn);
   });
-  // 大图与图注(结构在 index.html 静态写好,此处注入路径与文案)
-  realwallOverlayEl.querySelectorAll(".realwall-fig").forEach((fig, i) => {
-    const p = config.realwall[i];
-    if (!p) return;
-    const img = fig.querySelector("img");
-    const cap = fig.querySelector("figcaption");
-    if (img) {
-      img.src = realwallAssetUrl(p.path);
-      attachRealwallFallback(img, p.path);
-      img.alt = p.caption;
-    }
-    if (cap) cap.textContent = p.caption;
-  });
+
   const realwallCloseBtn = document.getElementById("realwall-close");
   if (realwallCloseBtn) {
     realwallCloseBtn.addEventListener("click", closeRealwall);
   }
-  // 点背景关闭,点照片不关
+
+  // 点背景关闭,点照片不关。擦除靠拖动,松手会落成一次 click——
+  // 位移超阈值就吞掉这次 click,否则拖完手指停在背景上会误关闭
+  // (与粒子"点击不误触"同一条纪律:轻触位移≈0 才算点击)
+  let rwDragMoved = 0;
   realwallOverlayEl.addEventListener("click", (e) => {
+    if (rwDragMoved > 8) { rwDragMoved = 0; return; }
     if (e.target === realwallOverlayEl) closeRealwall();
   });
+
+  // ---- 驱动 1:滚轮(桌面主路径) ----
+  // 必须 passive:false 才能 preventDefault。全局粒子滚轮监听虽是 passive 的,
+  // 但它在 realwallIsOpen() 时已早退,两者不重叠、不抢
+  realwallOverlayEl.addEventListener("wheel", (e) => {
+    if (!realwallIsOpen()) return;
+    e.preventDefault();
+    setRealwallWipe(realwallWipe + e.deltaY * RW_WHEEL_STEP);
+  }, { passive: false });
+
+  // ---- 驱动 2:触摸(手机) ----
+  // 照片是竖构图,用户会先竖着滑 → 把竖向位移映射到横向擦除。
+  // 用"起手进度 + 位移增量"的绝对映射(不是增量累加),来回滑不会漂移
+  let rwTouch = null;
+  realwallOverlayEl.addEventListener("touchstart", (e) => {
+    if (!realwallIsOpen()) return;
+    rwTouch = { startY: e.touches[0].clientY, startWipe: realwallWipe };
+    rwDragMoved = 0;
+  }, { passive: true });
+  realwallOverlayEl.addEventListener("touchmove", (e) => {
+    if (!realwallIsOpen() || !rwTouch) return;
+    e.preventDefault();
+    const dy = rwTouch.startY - e.touches[0].clientY; // 上滑为正 → 前进
+    rwDragMoved = Math.max(rwDragMoved, Math.abs(dy));
+    setRealwallWipe(rwTouch.startWipe + dy / (window.innerHeight * RW_TOUCH_DIST));
+  }, { passive: false });
+  realwallOverlayEl.addEventListener("touchend", () => { rwTouch = null; }, { passive: true });
+
+  // ---- 驱动 3:键盘(Esc 关闭 / ← → 擦除 / Tab 焦点圈定) ----
   document.addEventListener("keydown", (e) => {
     if (!realwallIsOpen()) return;
     if (e.key === "Escape") closeRealwall();
-    if (e.key === "Tab") {
+    else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      setRealwallWipe(realwallWipe + 0.08);
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setRealwallWipe(realwallWipe - 0.08);
+    } else if (e.key === "Tab") {
       // 焦点圈定:查看器内仅关闭按钮可聚焦
       e.preventDefault();
       if (realwallCloseBtn) realwallCloseBtn.focus();
@@ -1134,6 +1233,10 @@ function buildPoints(data, stats) {
     texMeshes: stats.texMeshes ?? 0,
   };
   window.__showcaseReady = true; // 喂饱 index.html 的加载看门狗
+  // 验证钩子(只读):擦除对比开启期间滚轮/触摸不得驱动粒子消散,这条守卫要靠
+  // 读写 flow.phase 才能断言(与 #realwall-overlay 的 dataset.wipe 同一条理由:
+  // 测试不该去解析渲染状态)。不参与任何业务逻辑。
+  window.__flow = flow;
   console.log("[showcase] 实际粒子数量 =", geometry.attributes.position.count);
 
   // 初始化布局并启动

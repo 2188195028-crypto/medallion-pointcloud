@@ -10,8 +10,8 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.7/assets/three/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.7/assets/three/"
+      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.8/assets/three/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.8/assets/three/"
     }
   }
   </script>
@@ -56,17 +56,18 @@
       </div>
     </section>
 
-    <!-- 落地实景大图查看器(默认隐藏,缩略图点击打开;Esc/背景/关闭钮均可关闭) -->
-    <div id="realwall-overlay" hidden role="dialog" aria-modal="true" aria-label="落地实景照片">
+    <!-- 落地实景擦除对比(默认隐藏,缩略图点击打开;Esc/背景/关闭钮均可关闭)
+         单舞台叠两图:before 打底,after 在上层靠 mask 揭示 —— 结构由 JS 注入路径与文案 -->
+    <div id="realwall-overlay" hidden role="dialog" aria-modal="true" aria-label="落地实景前后对比">
       <button id="realwall-close" type="button" aria-label="关闭实景照片">×</button>
-      <figure class="realwall-fig">
-        <img alt="" />
-        <figcaption></figcaption>
+      <figure class="realwall-stage">
+        <div class="realwall-frame" id="realwall-frame">
+          <img id="realwall-before" class="realwall-img realwall-img--before" alt="" />
+          <img id="realwall-after" class="realwall-img realwall-img--after" alt="" />
+        </div>
+        <figcaption id="realwall-caption"></figcaption>
       </figure>
-      <figure class="realwall-fig">
-        <img alt="" />
-        <figcaption></figcaption>
-      </figure>
+      <p class="realwall-hint" id="realwall-hint">滚动擦除 · 对比上墙前后</p>
     </div>
 
     <!-- 底部界面(仅保留编号) -->
@@ -111,7 +112,7 @@
   <!-- 引导:主模块 CDN 优先(国内快),失败自动重试一次再回退本地。
        showcase.js 内相对导入 ./showcase-config.js 跟随模块来源自动切换 -->
   <script type="module">
-    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.7/";
+    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.8/";
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let ok = false;
     for (let attempt = 0; attempt < 2 && !ok; attempt++) {
