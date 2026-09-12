@@ -125,3 +125,29 @@
 | 对齐值复核 | ✅ | 4 种自动化方法 + 视觉模型盲测（5 张合成图，含 ±12px 故意错位对照）——**均无法作为基准**，结论：保持原值，残余由羽化盖住（见 #12） |
 | 全量复测 | ✅ | `RW_LOCAL=1 shot-realwall.js` 24/24；`RW_LOCAL=1 verify.js` 全绿（0 pageerror / 0 console.error / 0 netLocal / 粒子 90000 / 五视口收容断言全过） |
 | 发布 v1.8 | ✅ | commit 9e3eb1e + tag v1.8 + push tag → master 完成；预热 12 条中 `.js`/`.bin` 全 200、3 张图片 301（即已知坑 22）；Pages 构建完成（07:06 UTC）；线上桌面 1600×900 加载 11.9s、手机 390×844 4.8s，粒子成形、照片取色启用、实景两图 912/1000px 且擦除可用、overlay 可开可关；file:// 双击 11.6s 可用但**照片取色失效**。唯一 404 = favicon.ico（Pages 站点级，与页面无关）。验证中发现的图片 301 缺陷转入 v1.9 轮 |
+
+## 6. v1.9 轮（修 jsDelivr 图片 301，2026-09-12）
+
+**本轮性质**：v1.8 线上/file:// 验证时发现的 CDN 缺陷收口（非 v1.8 引入，至少影响 v1.6-v1.8，长期未被发现）。
+
+### 问题-修复-复测表（v1.9 轮）
+
+| # | 严重度 | 问题（现象/根因） | 修复 | 复测结果 |
+|---|---|---|---|---|
+| 14 | 高 | **jsDelivr 把"图片类"资源 301 重定向到 raw.githubusercontent.com**（jsdelivr/jsdelivr#18420，2024 年起），国内大概率不可达；而 cdnBase 同时供 reference.jpg + 两张实景图用。301 是恒定的，能否拿到图取决于 raw 域名可达性（时通时断）。实测后果：① file:// 双击照片取色失败——raw 慢/不通时回退本地，而本地回退的 img 带 crossOrigin=anonymous，撞 null origin CORS 被拦 → 粒子静默退回色板重映射（颜色布局就错了）；② 该 CDN 图片请求在国内是**挂起 >60s** 而非快速失败，线上首屏靠 8s 兜底救回 | cdnBase 由 cdn.jsdelivr.net 换 **gcore.jsdelivr.net**（不参与该重定向）。测试侧：两脚本 CDN 拦截通配放宽为 `**/*.jsdelivr.net/**`；verify 的 isCdnHost 与缩略图 settle 判定同改（否则新 host 既拦不到、也不算"CDN 上游"） | 修复前实测：file:// 起点下 cdn 图片 60s 超时未加载、gcore 同条件 1.5s 加载 + getImageData 通过。修复后见执行记录 |
+
+### v1.9 轮执行记录
+
+| 阶段 | 状态 | 结果 |
+|---|---|---|
+| 缺陷定位 | ✅ | curl 分主机比对（v1.7 与 v1.8 同样 301 → 非本轮引入）+ jsDelivr issue #18420 + 浏览器内 A/B 探针（file:// 起点：cdn 60s 超时 / gcore 1.5s 成功） |
+| 修法验证 | ✅ | gcore 全资源 200 + `ACAO:*` + MIME 正确；国内延迟与 cdn 同级（bin 1.9-2.8s vs 1.4-1.6s）；测试通配 `**/*.jsdelivr.net/**` 命中 gcore 已单独验证 |
+| 测试补强 | ✅ | verify.js / shot-realwall.js 拦截通配 + isCdnHost + 缩略图 settle 判定同步新 host |
+| 全量复测 | ✅ | `RW_LOCAL=1 verify.js` 全绿（fails [] / 0 pageerror / 0 console.error / 0 netLocal / 0 netCdn；五视口 overlay 数据齐全，wipe=0、mask 渐变、宽比 1.0150）；`RW_LOCAL=1 shot-realwall.js` 24/24 |
+| 发布 v1.9 | ✅ | commit dafe77e + tag v1.9 + push tag → master；预热按 host 拆分共 18 条全 200（cdn 14 条 three 链路 / gcore 4 条 bin+图片）；Pages 构建完成（07:21 UTC） |
+| 线上 + file:// 复验 | ✅ | 桌面 1600×900 9.6s（← 11.9s）、手机 390×844 4.5s、file:// 双击 **4.1s（← 11.6s，照片取色恢复，错误 2 → 0）**；三场景图片/bin 全部 200 直出 gcore、**触达 raw.githubusercontent 0 次**、零回退警告。唯一 404 = favicon.ico（Pages 站点级，与页面无关） |
+
+### 文档同步（本轮）
+
+- CLAUDE.md：项目概述加"CDN 分两主机"说明；部署段预热清单**按 host 拆分**并补上一直漏掉的 `three.core.js`（1.4MB，每次加载必拉）；已知坑 22（含"不要顺手统一两主机"的告警）；备用 CDN 段更正为"可达性会变，换主机前重新 curl"（旧结论"gcore 不可达"已过期，保留原实测记录并标注失效）；版本段 v1.9
+- 本文件：v1.8 发布行由 ⏳ 改 ✅ 并补实测数据；v1.7 轮"file:// 失败归因于预热未扩散"**更正**为图片 301（原归因写在该轮补记里）
