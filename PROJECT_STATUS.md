@@ -99,6 +99,7 @@
 | 交付 | ✅ | CLAUDE.md/PROJECT_STATUS 同步 + 记忆更新 + 汇报 |
 
 > v1.7 发布轮补记（2026-09-05）：commit 24eee99 + tag v1.7 + push 完成；jsDelivr 12 条 @v1.7 URL 预热全 200（addons 实际路径在 assets/three/{postprocessing,loaders}/，importmap 前缀映射无 addons/ 子目录——预热清单已写入 CLAUDE.md 部署段防再踩）。Pages 构建后线上验证：桌面热载 6.1s / 手机 390×844 6.6s（layoutScale 0.5571、打字 103 字打满、缩略图 2/2 走 CDN、零横向溢出）；二次加载 0 4xx/0 console.error；file:// 双击 10.8s 出全（打字打满 + 缩略图 + 零错误）。与 v1.6 同款现象：tag 推出后最初 ~15 分钟内 jsDelivr 边缘回源未稳，file:// 场景实测 2/4 次撞 bin/照片 CDN 挂起 → 15s 超时走本地回退 → file:// CORS 拦截 → 45s 看门狗提示（该降级路径有重新加载按钮兜底，预热扩散后消失）。
+> **该归因已被 v1.9 轮修正（2026-09-12）**：file:// 照片取色失败并非"预热未扩散"，而是 jsDelivr 图片类资源被 301 到 raw.githubusercontent.com（已知坑 22）——301 恒定存在，能否成功取决于 raw 域名可达性，因此表现为时通时断。bin 走 cdn 不受影响（.bin 不在重定向范围内）。
 
 ## 5. v1.8 轮（落地实景改擦除对比 + 收尾，2026-09-12）
 
@@ -123,4 +124,4 @@
 | 测试补强 | ✅ | verify.js 加 RW_LOCAL + 舞台几何断言（红绿已验证）；shot-realwall.js 加守卫/对照组（24 项） |
 | 对齐值复核 | ✅ | 4 种自动化方法 + 视觉模型盲测（5 张合成图，含 ±12px 故意错位对照）——**均无法作为基准**，结论：保持原值，残余由羽化盖住（见 #12） |
 | 全量复测 | ✅ | `RW_LOCAL=1 shot-realwall.js` 24/24；`RW_LOCAL=1 verify.js` 全绿（0 pageerror / 0 console.error / 0 netLocal / 粒子 90000 / 五视口收容断言全过） |
-| 发布 v1.8 | ⏳ | 待执行：commit → tag v1.8 → push tag → push master → 预热 12 条 → 线上 + file:// 验证 |
+| 发布 v1.8 | ✅ | commit 9e3eb1e + tag v1.8 + push tag → master 完成；预热 12 条中 `.js`/`.bin` 全 200、3 张图片 301（即已知坑 22）；Pages 构建完成（07:06 UTC）；线上桌面 1600×900 加载 11.9s、手机 390×844 4.8s，粒子成形、照片取色启用、实景两图 912/1000px 且擦除可用、overlay 可开可关；file:// 双击 11.6s 可用但**照片取色失效**。唯一 404 = favicon.ico（Pages 站点级，与页面无关）。验证中发现的图片 301 缺陷转入 v1.9 轮 |

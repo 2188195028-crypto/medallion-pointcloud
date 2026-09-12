@@ -98,7 +98,20 @@ export default {
   // 粒子数据 CDN 镜像:GitHub Pages 在国内网络下载 bin 极慢(实测 27-45KB/s,
   // 1.98MB 需 70s+),jsDelivr 国内节点 ~2s。15s 超时失败自动回退本地。
   // 用版本 tag(v1.1)而非 @master:不可变 URL 缓存永久生效,推送新 commit 不失效。
-  cdnBase: "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.8/",
+  //
+  // **必须是 gcore 镜像,不能改回 cdn.jsdelivr.net**(2026-09-12 实测):jsDelivr 自
+  // 2024 年起把**图片类**资源 301 重定向到 raw.githubusercontent.com(jsdelivr#18420),
+  // 国内大概率不可达;而 cdnBase 同时供 reference.jpg 和两张实景 webp 使用。301 是
+  // 恒定的,能否拿到图取决于 raw 域名可达性(国内时通时断)。后果实测:
+  // ① file:// 双击照片取色**大概率失效**——raw 慢/不通时回退本地,而本地回退的 img
+  //    带 crossOrigin="anonymous",撞 file:// 的 null origin CORS 被拦,粒子静默退回
+  //    色板重映射(颜色布局就错了);
+  // ② 该 CDN 图片请求在国内不是快速失败而是**挂起 >60s**,只靠 8s 兜底救回,线上首屏
+  //    因此白等 8s(实测桌面 11.9s vs 手机 4.8s 的差就是这个)。
+  // gcore 镜像不参与该重定向:实测 200 + ACAO:* + crossOrigin 取色可用(1.5s)。
+  // three 模块仍走 cdn.jsdelivr.net(URL 写在 index.html importmap 里),那是 .js,
+  // 不受图片重定向影响,**不要为了"统一主机"把它们一起改过来或把这里改回去**。
+  cdnBase: "https://gcore.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.9/",
   // 参考照片(粒子取色源):模型贴图与照片四季布局不一致(照片左侧为黛蓝雪山、
   // 右上为朱红秋山,模型贴图缺失这些色域),按粒子盘面位置采样照片像素,
   // 保证渲染颜色布局与照片一致。照片 232KB,需随仓库入库(GitHub Pages)。

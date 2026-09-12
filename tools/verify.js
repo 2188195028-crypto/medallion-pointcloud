@@ -46,7 +46,9 @@ const MIME = {
 
 async function installLocalCdn(ctx) {
   if (!LOCAL) return;
-  await ctx.route("**/cdn.jsdelivr.net/**", async (route) => {
+  // 通配 *.jsdelivr.net:three 模块走 cdn.jsdelivr.net,bin/图片走 gcore.jsdelivr.net
+  // (config.cdnBase),发布前两个 host 的新 tag 都还不存在,都要用工作区文件应答
+  await ctx.route("**/*.jsdelivr.net/**", async (route) => {
     const m = route.request().url().match(/medallion-pointcloud@[^/]+\/(.+)$/);
     if (!m) return route.continue();
     const rel = decodeURIComponent(m[1].split("?")[0]);
@@ -103,7 +105,7 @@ async function waitThumbsSettle(page, group, ms) {
       () => {
         const imgs = Array.from(document.querySelectorAll(".realwall-thumb img"));
         if (!imgs.length) return false;
-        return imgs.every((i) => i.complete && (i.naturalWidth > 0 || !i.src.includes("cdn.jsdelivr.net")));
+        return imgs.every((i) => i.complete && (i.naturalWidth > 0 || !/jsdelivr\.net/.test(i.src)));
       },
       null,
       { timeout: ms }
@@ -258,9 +260,10 @@ async function main() {
   const report = {};
   const errors = []; // 真实错误:pageerror + 非"资源加载失败"类 console.error
   // CDN 上游(发布前 tag 未推出属预期,回退路径兜底;发布轮必须全净):
-  // 请求起点 cdn.jsdelivr.net,404 时 jsDelivr 302 重定向到 raw.githubusercontent.com
-  // (ref 规范化为 "1.6"),最终 URL 记在后者 —— 两个 host 同属一条预期失败链路
-  const isCdnHost = (u) => u.includes("cdn.jsdelivr.net") || u.includes("githubusercontent.com");
+  // 起点是 cdn.jsdelivr.net(three 模块)或 gcore.jsdelivr.net(bin/图片,config.cdnBase),
+  // 404 时 jsDelivr 会重定向到 raw.githubusercontent.com(ref 规范化为 "1.6"),最终 URL
+  // 记在后者 —— 这些 host 同属一条预期失败链路,不能算"本地资源失败"。
+  const isCdnHost = (u) => u.includes("jsdelivr.net") || u.includes("githubusercontent.com");
   const netCdn = [];
   const netLocal = []; // 本地/同源资源 4xx 或失败(真实问题)
 

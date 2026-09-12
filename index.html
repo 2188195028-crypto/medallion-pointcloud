@@ -10,8 +10,8 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.8/assets/three/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.8/assets/three/"
+      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.9/assets/three/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.9/assets/three/"
     }
   }
   </script>
@@ -112,7 +112,7 @@
   <!-- 引导:主模块 CDN 优先(国内快),失败自动重试一次再回退本地。
        showcase.js 内相对导入 ./showcase-config.js 跟随模块来源自动切换 -->
   <script type="module">
-    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.8/";
+    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.9/";
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let ok = false;
     for (let attempt = 0; attempt < 2 && !ok; attempt++) {

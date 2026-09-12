@@ -10,6 +10,9 @@
 - **双击 index.html 直接可用(file://)**:全部静态资源走 jsDelivr CDN 绝对地址,
   无需本地服务器(2026-08-04 v1.4 起)。离线开发仍可用
   `python tools/serve_debug.py 8137` 或双击 `start.bat`
+- **CDN 分两个主机(v1.9 起)**:three 模块走 `cdn.jsdelivr.net`(index.html importmap),
+  bin/照片/实景图走 **`gcore.jsdelivr.net`**(config.cdnBase)——图片走 cdn 会被 301 到
+  国内不可达的 raw.githubusercontent.com(已知坑 22)。**别为了"统一主机"把这俩合并**
 - 加载时长:CDN 热缓存 ~10s(冷缓存首次 ~28s,看门狗 45s 覆盖)
 - 仓库:github.com/2188195028-crypto/medallion-pointcloud(分支 master,SSH push)
 
@@ -199,8 +202,9 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
 **国内网络下 GitHub Pages 下载大文件极慢(实测 27-45KB/s),全部静态资源走 jsDelivr CDN:**
 
 - index.html(2.8KB)来自 Pages;showcase.js/CSS 由 index.html 引导脚本动态 import
-  jsDelivr(失败回退本地);three 模块走 importmap → jsDelivr;bin/照片走 cdnBase
-  优先(15s 超时/失败回退本地)。
+  jsDelivr(失败回退本地);three 模块走 importmap → **cdn.jsdelivr.net**;bin/照片/
+  实景图走 cdnBase → **gcore.jsdelivr.net** 优先(15s/8s 超时或失败回退本地)。
+  两个主机不是随意选的,理由见项目概述与已知坑 22。
 - **每次发布必须递增 tag**(jsDelivr tag URL 不可变缓存,重复 tag 会永久缓存旧内容)。
   **发布顺序(重要,顺序错了页面会挂):**
 ```bash
@@ -210,10 +214,14 @@ git add -A && git commit -m "..."
 # 3. 打 tag 并推送:先 push tag,再 push master
 git tag v1.6 && git push origin v1.6 && git push origin master
 # 4. 立即预热 jsDelivr(否则用户首次打开撞冷缓存 ~21s+解析 7s ≈ 28s):
-#    预热清单 12 条,curl 逐个拉,404 串行重试(并发预热可能被限流):
-#      showcase.js / showcase-config.js / assets/three/three.module.js /
-#      assets/three/postprocessing/{EffectComposer,RenderPass,UnrealBloomPass}.js /
-#      assets/three/loaders/{GLTFLoader,DRACOLoader}.js /
+#    curl 逐个拉,404 串行重试(并发预热可能被限流)。**两个主机分开预热**:
+#    cdn.jsdelivr.net(data 模式实际会拉的模块):
+#      showcase.js / showcase-config.js /
+#      assets/three/three.module.js / assets/three/three.core.js(1.4MB,最大件)/
+#      assets/three/postprocessing/{EffectComposer,RenderPass,UnrealBloomPass,Pass,ShaderPass,MaskPass}.js /
+#      assets/three/shaders/{CopyShader,LuminosityHighPassShader}.js
+#      (assets/three/loaders/{GLTFLoader,DRACOLoader}.js 仅 glb 模式用,预热无妨)
+#    gcore.jsdelivr.net(config.cdnBase):
 #      assets/particles.bin / assets/reference.jpg /
 #      assets/wall-before.webp / assets/wall-after.webp
 #    (注意:importmap "three/addons/" 是前缀映射,剩余部分直接拼在
@@ -221,7 +229,10 @@ git tag v1.6 && git push origin v1.6 && git push origin master
 # 5. 等 Pages 构建(~2-3 分钟),验证线上 + 本地 file:// 双击
 ```
 - 常见坑:照片 CDN 加载必须 `img.crossOrigin="anonymous"`(否则 canvas tainted,
-  getImageData 抛 SecurityError → 静默回退色板)。
+  getImageData 抛 SecurityError → 静默回退色板)。**加了 crossOrigin 之后,file:// 下
+  只有真带 CORS 头的 CDN 图能取色**:本地相对路径回退在 file:// 必被 null origin 拦掉
+  (实测 `from origin 'null' has been blocked by CORS policy`),所以"双击打开颜色是否
+  正确"完全取决于 cdnBase 那台主机可达且不被重定向(见已知坑 22)。
 - 加载看门狗:45s 未初始化显示错误提示(避免 HR 卡转圈;25s 会误报——
   冷缓存 21s+解析 7s ≈ 28s)。URL 加 ?nowatchdog=1 可跳过看门狗(调试/自动化
   测试用:发布前 CDN 挂起漂移可把加载拖到 45s+,error 面板会遮屏拦点击)。
@@ -229,8 +240,11 @@ git tag v1.6 && git push origin v1.6 && git push origin master
   重定向 raw.githubusercontent 后 ERR_BLOCKED_BY_ORB、或干脆挂起不返回
   (error 永不触发)。验证脚本按 host 归因(jsDelivr + githubusercontent 的
   404/失败 = 发布前预期;本地 host 出现 4xx 才是真问题)。
-- **备用 CDN 实测不可达**(此网络):fastly/gcore/testingcf.jsdelivr.net、
-  statically.io 全部超时,只有 cdn.jsdelivr.net 通。改 CDN 前先 curl 验证。
+- **备用 CDN 可达性会变,换主机前必须重新 curl 验证**(旧结论会过期):
+  2026-09 早期一轮实测 fastly/gcore/testingcf.jsdelivr.net 与 statically.io 全部超时;
+  **2026-09-12 复测 gcore 全通**——showcase.js / particles.bin / reference.jpg 各 3 次
+  全 200(0.7-2.8s),且带 `ACAO:*`,是唯一不被图片 301 影响的镜像,v1.9 的 cdnBase
+  因此定在 gcore。**别拿这一行当"gcore 不可用"的依据**(当时的实测是真的,现在不成立)。
 - HTTPS push 常超时(网络),已切 SSH:
   `git remote set-url origin git@github.com:2188195028-crypto/medallion-pointcloud.git`
 - gh 已登录(2188195028-crypto,keyring),Pages 用 master 分支根目录
@@ -288,6 +302,19 @@ git tag v1.6 && git push origin v1.6 && git push origin master
     最优解都钉在搜索边界、NCC 峰值弱且各带乱跳(0.22-0.60)。视觉模型也只对相对
     判断可靠(本轮它把故意错位的对照图判成"最自然",不能当基准)。结论:保持
     config 里那组实测值不动,残余错位由羽化盖住;**要改必须先有新的可靠测量方法**
+22. **jsDelivr 自 2024 年起把"图片类"资源 301 重定向到 raw.githubusercontent.com**
+    (jsdelivr/jsdelivr#18420),国内大概率不可达;而 cdnBase 同时供 reference.jpg
+    与两张实景 webp 使用。此问题至少影响 v1.6-v1.8,2026-09-12 发 v1.8 做线上验证时
+    才发现。301 是**恒定**的,之后能否拿到图取决于 raw 域名可达性(国内时通时断)。
+    实际后果:① file:// 双击照片取色**大概率失效**——raw 慢/不通时回退本地,而本地
+    回退的 img 带 crossOrigin=anonymous,撞 file:// 的 null origin CORS 被拦 → 粒子
+    静默退回色板重映射(颜色布局就错了);② 该图片请求在国内不是快速失败而是
+    **挂起 >60s**(实测),只靠 8s 兜底救回,线上首屏白等 8s(桌面 11.9s vs 手机
+    4.8s 的差就是这个)。
+    修法:cdnBase 换 **gcore.jsdelivr.net**(不参与该重定向;实测 200 + ACAO:* +
+    crossOrigin 取色 1.5s 通过)。**three 模块在 cdn.jsdelivr.net 上是 .js,不受影响,
+    不要"顺手统一"到 gcore**(两主机各有理由,见项目概述)。测试侧配套:两个脚本的
+    CDN 拦截通配是 `**/*.jsdelivr.net/**`(覆盖两个 host),新增 CDN 主机时要同步放宽
 
 ## 文案/参数修改入口(showcase-config.js)
 - 文案:categoryEn/titleZh/aliasEn/introZh/introSubZh/bodyZh/features/palette/craftTags
@@ -323,3 +350,11 @@ git tag v1.6 && git push origin v1.6 && git push origin master
   **RW_LOCAL 发布前模式**(此前发布前根本跑不了 verify,importmap 无回退);
   shot-realwall.js 重写为擦除全流程(24 项)并新增 **粒子消散守卫 + 对照组**
   (读 window.__flow.phase 钩子;对照组的必要性见已知坑 19)。
+  发布:tag v1.8,push tag → master,预热后线上 + file:// 验证 —— 正是在这一步发现
+  图片 301(已知坑 22),于是紧接着发 v1.9。
+- v1.9(tag,2026-09-12):修复 jsDelivr 图片 301(已知坑 22)——`cdnBase` 由
+  cdn.jsdelivr.net 换到 **gcore.jsdelivr.net**,恢复 file:// 双击的照片取色,并去掉
+  线上首屏那 8s 兜底白等。测试侧同步:两个脚本的 CDN 拦截通配由
+  `**/cdn.jsdelivr.net/**` 放宽为 `**/*.jsdelivr.net/**`,verify 的 isCdnHost 与
+  缩略图 settle 判定同改(否则 bin/图片的新 host 既拦不到也不算"CDN 上游")。
+  three 模块链路未动(照旧 cdn.jsdelivr.net)。

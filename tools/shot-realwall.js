@@ -44,7 +44,9 @@ const MIME = {
 
 async function installLocalCdn(ctx) {
   if (!LOCAL) return;
-  await ctx.route("**/cdn.jsdelivr.net/**", async (route) => {
+  // 通配 *.jsdelivr.net:三个 three 模块走 cdn.jsdelivr.net,而 bin/图片走
+  // gcore.jsdelivr.net(config.cdnBase,见 showcase-config.js 里的理由),两个 host 都要拦
+  await ctx.route("**/*.jsdelivr.net/**", async (route) => {
     const m = route.request().url().match(/medallion-pointcloud@[^/]+\/(.+)$/);
     if (!m) return route.continue();
     const rel = decodeURIComponent(m[1].split("?")[0]);
