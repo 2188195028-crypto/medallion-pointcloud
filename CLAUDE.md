@@ -447,7 +447,7 @@ git tag v1.6 && git push origin v1.6 && git push origin master
   three 模块链路未动(照旧 cdn.jsdelivr.net)。
 - v2.0(仅工作区,未发布,**已被 v2.1 取代**):入口牌 + 圆形光斑 overlay 章节。
   用户复审后认为展示效果不对,整轮推翻,未 commit、未打 tag。
-- v2.1(工作区,待发布,2026-10-18):按 `点云文物提示词.txt` + Ripplix
+- v2.1(tag,2026-10-18,已发布):按 `点云文物提示词.txt` + Ripplix
   **Editorial Split Feature Reveal** 重写展示结构——保留首幕点云,向下接
   **第二幕编辑式分栏**(标题逐行 blur(8px)→0 / 上移 32px 错峰,图片
   scale 1.08→1 推近)、**第三幕青瓷项目档案**(前期规划 5 步 + 材料工序 6 行)
@@ -465,3 +465,7 @@ git tag v1.6 && git push origin v1.6 && git push origin master
   **用户复审修正**:第四幕「叠合补偿」文案行已删除(用户明确要求删掉;
   此前一轮曾误解为保留),lead 同步去掉补偿说明。`align` 1.015 / 0.6969%
   只是渲染对齐的内部值,保留不动,不再出现在页面文案里。
+  **发布(2026-10-18)**:commit 260e6ad + tag v2.1,先 push tag 再 push master;
+  预热 cdn 14 条(首轮 7 条 000,重试后全 200)+ gcore 4 条(首轮全 200);
+  Pages 即时报 @v2.1;线上桌面 19.2s / 手机 13.0s / file:// 16.2s,
+  四幕、数字横带、对比全通,0 个 4xx/5xx、0 pageerror。
