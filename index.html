@@ -2,90 +2,189 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <title>繁荣昌盛 · FOUR SEASONS MEDALLION 点云展陈</title>
+  <title>繁荣昌盛 · 点云展陈与落地实景</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="《繁荣昌盛》四季山水圆盘的点云展陈：九万颗粒子、汉中福地茶业墙面落地实景，以及同机位改造前后对比。" />
+  <meta name="theme-color" content="#141311" />
   <link rel="stylesheet" href="showcase.css" />
   <!-- three.js 模块走 jsDelivr CDN(国内加载快:Pages 实测 three.core.js 需 14s,
        jsDelivr ~2s;仓库 assets/three/ 已入库,离线开发可改回 ./assets/three/) -->
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.9/assets/three/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.9/assets/three/"
+      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v2.1/assets/three/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v2.1/assets/three/"
     }
   }
   </script>
 </head>
 <body>
   <main id="app">
-    <!-- 3D 点云画布 -->
+    <!-- 3D 点云画布：固定铺满视口，纸面章节滚上来时把它盖住 -->
     <div id="stage" aria-hidden="true"><canvas id="scene"></canvas></div>
 
-    <!-- 左侧博物馆图录式器物介绍 -->
-    <section id="text-panel" aria-label="器物介绍">
-      <p id="category"></p>
-      <h1 id="title"></h1>
-      <p id="alias"></p>
-      <p id="intro"></p>
-      <p id="intro-sub"></p>
+    <!-- ============================================================
+         第一幕 · 点云展陈（100svh，正常文档流）
+         文字面板固定，画布固定；向下滚动时纸面章节从下方覆盖第一幕，
+         同时粒子在覆盖前消散——点云交还给实景。
+         ============================================================ -->
+    <section id="hero" aria-label="点云展陈">
+      <div class="hero-vignette" aria-hidden="true"></div>
 
-      <!-- 正文（打字机效果） -->
-      <div id="body-wrap">
-        <p id="body"></p>
-        <span id="cursor" aria-hidden="true"></span>
+      <!-- 左侧博物馆图录式器物介绍 -->
+      <section id="text-panel" aria-label="器物介绍">
+        <p id="category"></p>
+        <h1 id="title"></h1>
+        <p id="alias"></p>
+        <p id="intro"></p>
+        <p id="intro-sub"></p>
+
+        <!-- 正文（打字机效果） -->
+        <div id="body-wrap">
+          <p id="body"></p>
+          <span id="cursor" aria-hidden="true"></span>
+        </div>
+
+        <!-- 特征词 -->
+        <ul id="features" aria-label="特征词"></ul>
+
+        <!-- 主要颜色与工艺线索 -->
+        <div id="meta">
+          <div id="palette-wrap" class="meta-block">
+            <span class="meta-label">主要颜色</span>
+            <ul id="palette" aria-label="主要颜色"></ul>
+          </div>
+          <div id="tags-wrap" class="meta-block">
+            <span class="meta-label">工艺线索</span>
+            <ul id="tags" aria-label="工艺线索"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 首屏滚动提示：右侧竖排，避开圆盘主体 -->
+      <a class="hero-cue" id="hero-cue" href="#feature">
+        <span class="hero-cue-text">向下滚动 · 落地实景</span>
+        <span class="hero-cue-line" aria-hidden="true"></span>
+      </a>
+    </section>
+
+    <!-- ============================================================
+         第二幕 · 编辑式分栏揭示（展墙纸面色）
+         左文右图；标题逐行 blur(8px)→0、上移 32px→0，图片 1.08→1 推近落定。
+         触发阈值 0.25、只触发一次；减少动态时只保留透明度。
+         ============================================================ -->
+    <section id="feature" class="feature" aria-labelledby="feature-title">
+      <!-- 幕间颜色过渡：贴在纸面上缘的日出羽化带，随第二幕升起 -->
+      <div class="feature-dawn" aria-hidden="true"></div>
+      <div class="feature-inner">
+        <div class="feature-copy">
+          <p class="feature-kicker"><span id="feature-kicker"></span></p>
+          <h2 id="feature-title" class="feature-title"></h2>
+          <div class="feature-rule" aria-hidden="true"></div>
+          <p class="feature-lead" id="feature-lead"></p>
+          <dl class="feature-facts" id="feature-facts"></dl>
+          <a class="feature-cta" id="feature-cta" href="#dossier">
+            <span id="feature-cta-label"></span>
+            <span class="feature-cta-arrow" aria-hidden="true">↓</span>
+          </a>
+        </div>
+
+        <figure class="feature-media">
+          <div class="feature-media-frame">
+            <img id="feature-img" alt="" loading="lazy" decoding="async" />
+          </div>
+          <figcaption><span id="feature-caption"></span></figcaption>
+        </figure>
       </div>
+    </section>
 
-      <!-- 特征词 -->
-      <ul id="features" aria-label="特征词"></ul>
+    <!-- ============================================================
+         第三幕 · 项目档案（灰阶底）
+         前期规划五步 + 施工材料与工序。
+         数字只放用户确认的三项：圆盘直径 2m、现场 7 天、现场 4 人；
+         面积、材料用量等未核实，不写。
+         时间线是真实顺序，编号用于定位阶段，不做装饰。
+         ============================================================ -->
+    <section id="dossier" class="dossier" aria-labelledby="dossier-title">
+      <div class="dossier-inner">
+        <header class="dossier-head">
+          <p class="dossier-kicker"><span id="dossier-kicker"></span></p>
+          <h2 id="dossier-title" class="dossier-title"></h2>
+          <p class="dossier-lead" id="dossier-lead"></p>
+        </header>
 
-      <!-- 主要颜色与工艺线索 -->
-      <div id="meta">
-        <div id="palette-wrap" class="meta-block">
-          <span class="meta-label">主要颜色</span>
-          <ul id="palette" aria-label="主要颜色"></ul>
-        </div>
-        <div id="tags-wrap" class="meta-block">
-          <span class="meta-label">工艺线索</span>
-          <ul id="tags" aria-label="工艺线索"></ul>
-        </div>
-        <!-- 落地实景:店面前后对比照片缩略图(点击看大图,showcase.js 注入) -->
-        <div id="realwall-wrap" class="meta-block">
-          <span class="meta-label">落地实景</span>
-          <div id="realwall-thumbs"></div>
+        <dl class="dossier-stats" id="dossier-stats" aria-label="项目数字"></dl>
+
+        <div class="dossier-grid">
+          <div class="dossier-plan">
+            <h3 class="dossier-subtitle" id="dossier-plan-title"></h3>
+            <ol class="dossier-steps" id="dossier-steps"></ol>
+          </div>
+
+          <div class="dossier-ledger">
+            <h3 class="dossier-subtitle" id="dossier-ledger-title"></h3>
+            <dl class="dossier-materials" id="dossier-materials"></dl>
+            <p class="dossier-note" id="dossier-note"></p>
+            <a class="dossier-cta" id="dossier-cta" href="#compare">
+              <span id="dossier-cta-label"></span>
+              <span class="dossier-cta-arrow" aria-hidden="true">↓</span>
+            </a>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- 落地实景擦除对比(默认隐藏,缩略图点击打开;Esc/背景/关闭钮均可关闭)
-         单舞台叠两图:before 打底,after 在上层靠 mask 揭示 —— 结构由 JS 注入路径与文案 -->
-    <div id="realwall-overlay" hidden role="dialog" aria-modal="true" aria-label="落地实景前后对比">
-      <button id="realwall-close" type="button" aria-label="关闭实景照片">×</button>
-      <figure class="realwall-stage">
-        <div class="realwall-frame" id="realwall-frame">
-          <img id="realwall-before" class="realwall-img realwall-img--before" alt="" />
-          <img id="realwall-after" class="realwall-img realwall-img--after" alt="" />
-        </div>
-        <figcaption id="realwall-caption"></figcaption>
-      </figure>
-      <p class="realwall-hint" id="realwall-hint">滚动擦除 · 对比上墙前后</p>
-    </div>
+    <!-- ============================================================
+         第四幕 · 同机位前后对比（近白底）
+         两图按实测补偿叠合：after 放大 1.015 / 下移 8px(相对 1148 高)。
+         分隔线左侧 before、右侧 after，接缝带 2.2% 羽化，盖掉残余错位。
+         ============================================================ -->
+    <section id="compare" class="compare" aria-labelledby="compare-title">
+      <div class="compare-inner">
+        <header class="compare-head">
+          <p class="compare-kicker" id="compare-kicker"></p>
+          <h2 id="compare-title" class="compare-title"></h2>
+          <p class="compare-lead" id="compare-lead"></p>
+          <dl class="compare-spec" id="compare-spec"></dl>
+          <p class="compare-hint" id="compare-hint"></p>
+        </header>
 
-    <!-- 底部界面(仅保留编号) -->
-    <footer id="bottom-bar">
-      <span id="counter">01 / 01</span>
-    </footer>
+        <figure class="cmp-figure">
+          <div class="cmp-frame" id="cmp-frame" data-pos="50.0">
+            <img id="cmp-before" class="cmp-img cmp-img--before" alt="" loading="lazy" decoding="async" />
+            <div class="cmp-after-layer" id="cmp-after-layer">
+              <img id="cmp-after" class="cmp-img cmp-img--after" alt="" loading="lazy" decoding="async" />
+            </div>
+            <span class="cmp-tag cmp-tag--before" aria-hidden="true">改造前</span>
+            <span class="cmp-tag cmp-tag--after" aria-hidden="true">落地后</span>
+            <div class="cmp-handle" id="cmp-handle" role="slider" tabindex="0"
+                 aria-label="拖动查看改造前后" aria-valuemin="0" aria-valuemax="100"
+                 aria-valuenow="50" aria-valuetext="改造前 50%，落地后 50%"
+                 aria-orientation="horizontal">
+              <span class="cmp-handle-grip" aria-hidden="true">↔</span>
+            </div>
+          </div>
+          <figcaption id="cmp-caption"></figcaption>
+        </figure>
+      </div>
 
-    <!-- 加载状态 -->
-    <div id="loading" role="status" aria-live="polite">
-      <span>正在聚合点云…</span>
-    </div>
-
-    <!-- 错误状态（不允许黑屏） -->
-    <div id="error" role="alert" hidden>
-      <p id="error-msg">模型加载失败。</p>
-      <button id="reload" type="button">重新加载</button>
-    </div>
+      <footer class="site-foot">
+        <p class="site-foot-title">繁荣昌盛 · 四季山水圆盘<br /><span>点云展陈 / Ligong-Wenchang</span></p>
+        <a href="#hero">回到顶部 ↑</a>
+      </footer>
+    </section>
   </main>
+
+  <!-- 加载状态 -->
+  <div id="loading" role="status" aria-live="polite">
+    <span>正在聚合点云…</span>
+  </div>
+
+  <!-- 错误状态（不允许黑屏） -->
+  <div id="error" role="alert" hidden>
+    <p id="error-msg">模型加载失败。</p>
+    <button id="reload" type="button">重新加载</button>
+  </div>
 
   <!-- 双击直接打开(file://)也可用:全部静态资源走 jsDelivr CDN 绝对地址,
        无需本地服务器。离线时 CDN 不可达,由看门狗给出错误提示。
@@ -110,12 +209,15 @@
   </script>
 
   <!-- 引导:主模块 CDN 优先(国内快),失败自动重试一次再回退本地。
-       showcase.js 内相对导入 ./showcase-config.js 跟随模块来源自动切换 -->
+       showcase.js 内相对导入 ./showcase-config.js 跟随模块来源自动切换。
+       ?local=1(调试参数):跳过 CDN 直接用工作区文件——改动尚未发版时,
+       用本地服务器预览新代码(需 http,file:// 的相对模块导入会被 CORS 拦) -->
   <script type="module">
-    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v1.9/";
+    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v2.1/";
+    const useLocal = location.search.indexOf("local=1") !== -1;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let ok = false;
-    for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+    for (let attempt = 0; attempt < 2 && !ok && !useLocal; attempt++) {
       try {
         await import(cdn + "showcase.js");
         ok = true;

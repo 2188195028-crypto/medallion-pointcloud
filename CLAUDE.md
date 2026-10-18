@@ -3,8 +3,8 @@
 # ============================================================
 
 ## 项目概述
-深色展览风格的 3D 点云展陈页:加载预采样粒子数据,粒子聚合成一个
-圆盘器物(中心"繁荣昌盛"金字 + 四季山水),模型持续自动旋转。
+墨夜宣纸风格的 3D 点云展陈页(墨夜首幕 / 宣纸展墙 / 暖灰纸档案 / 米白对比):加载预采样粒子数据,
+粒子聚合成一个圆盘器物(中心"繁荣昌盛"金字 + 四季山水),模型持续自动旋转。
 
 - 线上地址(GitHub Pages):https://2188195028-crypto.github.io/medallion-pointcloud/
 - **双击 index.html 直接可用(file://)**:全部静态资源走 jsDelivr CDN 绝对地址,
@@ -17,18 +17,39 @@
 - 仓库:github.com/2188195028-crypto/medallion-pointcloud(分支 master,SSH push)
 
 ## 展示流程(用户最终确认的交互逻辑)
-1. 进入页面:粒子自动缓缓升起成形(入场动画 ~2.2s)
-2. 平时:模型保持旋转、成形展示不变(无计时、无自动循环)
-3. **鼠标/触摸拖拽:模型左右旋转(按住暂停自转,松手 4s 无操作后从当前角度恢复自转)**
-4. 滚轮滚一下 / 手指滑一下(>80px/60px 位移):粒子渐进消散(~2s,落地)
-5. 反方向滚 / 反向滑:粒子缓慢回升
-6. 点击/轻触:不触发任何效果(防误触)
-7. 页面切走/关闭:消散;回到页面:重新升起
-8. 重启按钮:重新升起
+页面是**正常文档流的滚动叙事**,四幕:
+1. **第一幕 · 点云展陈(墨夜底)**:粒子自动缓缓升起成形(入场 ~2.2s);平时保持
+   旋转成形(无计时、无自动循环)。鼠标/触摸拖拽 = 模型左右旋转(按住暂停自转,
+   松手 4s 无操作后从当前角度恢复)。首幕 100svh,画布与文字面板 fixed,
+   纸面章节从下方滚上来把它们盖住。**下滑时文字同步退场**:`scrollY` 在
+   0→0.5vh 间映射为 `--hero-exit` 0→1,各文字块按 `--exit-y/--exit-fade`
+   接力上移淡出(越靠下位移越大),首屏提示按 1.8 倍速率收线
+2. **第二幕 · 落地实景(宣纸底)**:编辑式左文右图。标题逐行 `blur(8px)→0`、
+   上移 32px→0 错峰入场,图片 `scale 1.08→1` + 上移 20px 推近落定;
+   触发阈值 0.25、只触发一次;CTA「看项目档案」跳第三幕
+3. **第三幕 · 项目档案(暖灰纸底)**:标题沿用逐行 blur→0 揭示(阈值 0.2、once);
+   标题下「项目数字」横带 3 项——圆盘直径 2m / 现场工期 7 天 / 现场人数 4 人
+   (**只用用户确认值**,面积与材料用量不写);左栏「前期规划」5 步
+   (现场勘测/构图定稿/等比放大/现场绘制/收尾验收),右栏「施工材料与工序」
+   6 行(基层/起稿/设色/金色/保护/现场);CTA「看同一机位的前后对比」跳第四幕
+4. **第四幕 · 同机位对比(米白底)**:同一机位前后两图叠放,分隔线左侧改造前、
+   右侧落地后;拖动分隔线/点画框/键盘 ←→(2%)、PageUp/PageDown(10%)、Home/End;
+   after 按实测值(放大 1.015、下移 0.6969%)与 before 咬合——这是内部渲染对齐,
+   **页面上不再展示补偿文案**(用户要求删除「叠合补偿」行)
+5. **粒子交接**:`scrollY > 0.5vh` 时粒子消散(1.1/s),纸面覆盖前让位给实景;
+   `scrollY < 0.25vh` 时回升(0.55/s),双阈值滞回防闪烁
+6. 点击/轻触:不触发粒子效果(防误触);页面切走/关闭:消散;回到页面:重新升起
+
+**幕间颜色过渡(第一幕→第二幕)**:`scrollY` 0→0.9vh 把 WebGL `scene.background`
+从墨夜 `#141311` 经 `#241813`/`#3b241b` 升温到暖褐 `#5a3728`(终点不取纸色,
+高亮底会顶穿 Bloom 0.82 阈值让整屏发光);第二幕 `#feature` 上缘的
+`.feature-dawn` 羽化带(22vh,下缘与 `--paper` 同色,向上经沙金/陶土到透明)
+随章节升上来,带内暖光 7.5s 呼吸(reduced-motion 关闭)。羽化带高度由
+`--dawn-band` 在前 0.16vh 内从 0 展开,**静止时必须为 0**,否则首屏底部提前露纸色。
 
 ## 文件结构
-- index.html — 页面骨架(文字区/底部栏/loading/error/importmap + CDN 引导脚本 + 45s 加载看门狗)
-- showcase.css — 深色展览主题 + 竖屏(手机)媒体查询
+- index.html — 页面骨架(四幕 section/loading/error/importmap + CDN 引导脚本 + 45s 加载看门狗)
+- showcase.css — 墨夜宣纸主题(墨夜/宣纸/暖灰纸/米白)+ 竖屏(手机)媒体查询
 - showcase.js — 全部逻辑(着色器/粒子/流程控制/交互)
 - showcase-config.js — 所有文案/颜色/模型/时间参数(改内容先改这里)
 - assets/particles.bin — 9 万粒子预采样数据(1.98MB,data 模式加载;与渲染数一致,无需抽取)
@@ -39,9 +60,12 @@
 - tools/serve_debug.py — 本地服务器 + /shot /diag 调试接口
 - tools/prepare_particles.py — GLB → particles.bin 预采样脚本
 - tools/verify.js — 多视口浏览器回归验证(Playwright + 系统 Edge 的 msedge 通道;
-  含每视口开一次擦除舞台的几何断言:两图加载/mask 生效/补偿落到布局/舞台不溢出)
-- tools/shot-realwall.js — 落地实景「擦除对比」全流程交互验证(两入口/滚轮/键盘/
-  触摸/Esc/背景/两图加载/粒子守卫+对照组;桌面 1600×900 + 手机 390×844)
+  每个视口走完四幕:首幕静止态收容 + 分栏揭示前/后状态 + 档案 5 步/6 行 +
+  对比几何/ARIA/键盘/
+  指针端点淡出)
+- tools/shot-realwall.js — 四幕滚动流交互验证(首幕文字退场→粒子消散→分栏终态→档案→CTA 链→
+  拖动/键盘滑杆→回顶回升;手机用 CDP 真实触摸滑动与触摸拖动手柄;
+  桌面 1600×900 + 手机 390×844)
 - **两个测试脚本都支持 RW_LOCAL=1**:发布前新 tag 未推出时,由测试侧拦截 CDN 用工作区
   文件应答(importmap 无法表达回退,否则 three 404 → 整页起不来,verify 直接超时)。
   不设该变量走真实链路,发布后的线上回归用默认模式。
@@ -74,30 +98,62 @@
   (请求不成功也不失败、onerror 永不触发,本项目多次实测)→ 8s 未成功则换本地
   相对路径重试(clearTimeout 于 onload/onerror;本地再失败才回退色板)。
 
-### 落地实景(realwall,店面前后「擦除对比」,v1.8 起)
-- config.realwall 是**对象**{before, after, align, feather, wheelStep, touchDistance}
-  → 缩略图 button(.realwall-thumb,aria-label)仍注入 #realwall-thumbs;
-  index.html 静态写好 #realwall-overlay(单张 .realwall-stage,内嵌 .realwall-frame
-  叠放 #realwall-before/#realwall-after 两图)。**v1.7 的 .realwall-fig 双图结构已废弃。**
-- 擦除对比:before 在文档流撑开画框,after 绝对定位叠上层,靠 mask 横向渐变揭示。
-  `--wipe-edge` 0→1;擦除进度写在 overlay 的 **dataset.wipe**(供测试读,别去解析
-  mask 字符串)。三驱动:滚轮(deltaY×wheelStep)/触摸(竖向位移映射横向)/
-  键盘(←→ 各 0.08、Esc 关闭、Tab 焦点圈定)。缩略图两个入口:点「改造前」从
-  wipe=0 进,点「落地后」从 wipe=1 进。
-- **对齐补偿必须走 config,不在 CSS 里改**:JS 把 align 折算成 --rw-scale /
-  --rw-offset-y / --rw-feather 注入 overlay 的 CSS 变量(CSS 内 var() 默认值只是兜底)。
+### 落地实景(realwall,第二至四幕,v2.1 起)
+- **四幕滚动流**:首幕点云(100svh,画布与文字面板 fixed)→ 第二幕 `#feature`
+  宣纸编辑式分栏(左文右图)→ 第三幕 `#dossier` 暖灰纸项目档案 →
+  第四幕 `#compare` 米白同机位对比。
+  v1.8 的「缩略图双入口 + 横向擦除」与 v2.0 的「入口牌 + 圆形光斑 overlay 章节」
+  均已废弃;`#realwall-overlay`、`.realwall-thumb`、`--wipe-edge` 全仓库不再使用。
+- config.realwall = {before, after, feature, dossier, comparison, align}。
+  第二至四幕的文案、事实、步骤、材料行、CTA、图注全部来自
+  `feature` / `dossier` / `comparison`,**改文案改 config,不在 HTML 里写死**。
+- **第二幕揭示(CSS 驱动,参考 Ripplix Editorial Split Reveal)**:
+  `setupFeatureReveal()` 用 IntersectionObserver(threshold 0.25, once)给
+  `#feature` 加 `.is-revealed`;标题行外层 `.split-line` 裁切、内层
+  `blur(8px)/translateY(32px)/opacity 0 → 0/0/1`(0.65s,stagger 80ms,
+  delayChildren 100ms);图片 `translateY(20px) scale(1.08)/opacity 0.4 → 0/1/1`
+  (0.9s),延迟随 `--line-count` 递增;朱砂短线 scaleX 0→1。
+  缓动 `cubic-bezier(0.22,1,0.36,1)`。`prefers-reduced-motion` 下只保留透明度。
+- **第三幕档案**:标题行复用 `.split-line` 的 `blur(8px)/y32→0` 揭示
+  (IntersectionObserver threshold 0.2、once);标题下 `#dossier-stats` 数字横带
+  3 项(`config.realwall.dossier.stats`:2m/7天/4人,`buildDossier()` 用
+  `textContent` 注入,上下细线 + 三栏竖线);左栏「前期规划」5 步、右栏
+  「施工材料与工序」6 行。编号对应真实工序顺序,不是装饰。**数字只放用户
+  确认的三项,面积/材料用量等未核实值一律不写**。
+- **一幕→二幕幕间晨曦**:`updateActDawnColor()` 按滚动在
+  `#141311 → #241813 → #3b241b → #5a3728` 间插值 `scene.background`;
+  `.feature-dawn` 是贴在 `#feature` 上缘外侧的 22vh 羽化带,下缘与 `--paper`
+  同色、向上经沙金/陶土到透明,随第二幕升过墨夜底。带高由 `--dawn-band`
+  在前 0.16vh 从 0 展开(静止必须为 0);`prefers-reduced-motion` 只关呼吸动画。
+- **第四幕滑杆**:before 在文档流撑开画框(912:1148),after 绝对定位叠上层,
+  由**线性 mask** 揭示:分隔线**左侧 before、右侧 after**,
+  `mask-image: linear-gradient(to right, transparent 0, transparent calc(pos - feather),
+  #000 pos, #000 100%)`。羽化带 `--cmp-feather` 2.2% 用来盖掉残余错位。
+  进度写在 `#cmp-frame` 的 `--cmp-pos` 与 `dataset.pos`(测试读 `window.__page.comparePos`)。
+- **对齐补偿必须走 config,不在 CSS 里改**:JS 把 align 折算成 `--cmp-scale` /
+  `--cmp-offset-y` / `--cmp-feather` 注入 CSS(CSS 内 var() 默认值只是兜底)。
   源图宽高比不同(before 912×1148 / after 1000×1275),scale 定义在"渲染宽之比"上,
   **改 before/after 源图必须重新量 align**,详见 showcase-config.js 的 realwall.align 注释。
 - **羽化带是承重结构不是装饰**:硬接缝处仍留 1-4px 残余错位(before 横线自身还有
-  ~1.9° 倾斜,scale+offset 校正不了旋转),靠 6% 羽化盖掉;换 clip-path / 调小 feather
+  ~1.9° 倾斜,scale+offset 校正不了旋转),靠 2.2% 羽化盖掉;换 clip-path / 调小 feather
   会把残余暴露成可见镶边。
-- **交互守卫**:overlay 打开期间(realwallIsOpen)滚轮/触摸手势不得触发粒子消散。
-  这条由 shot-realwall.js 断言(读 window.__flow.phase),且配了对照组(关掉 overlay
-  后同样滚轮必须能消散/回升)防假绿。
+- **滑杆交互与可访问性**:拖画框任意位置、拖手柄、键盘 ←→(2%)/
+  PageUp/PageDown(10%)/Home/End;`role="slider"` + aria-valuenow/valuetext
+  (读屏播报"改造前 X%,落地后 Y%"),被完全遮住的一侧加 `aria-hidden`。
+  手柄 44px、`touch-action: none`;画框 `touch-action: pan-y` 保纵向翻页。
+  **端点淡出只对指针输入生效**(`data-edge` + `data-input="pointer"`),
+  键盘操作保留手柄和焦点环。标签「改造前/落地后」在对应侧被完全遮住时一起淡出。
+- **输入方式跟踪**:捕获阶段监听 keydown/pointerdown 写 `cmpInputMode`,
+  避免程序性 focus 触发 `:focus-visible` 把指针端点淡出顶掉。
+- **粒子交接**:`setupHeroScroll()` 用 `scrollY > 0.5vh` 消散(1.1/s)、
+  `< 0.25vh` 回升(0.55/s),双阈值滞回。首幕完全滚出视口后帧循环暂停渲染,
+  但 `flow.easing` 未落定时继续跑到落定(否则快速下滚会把消散冻在半路)。
 - CDN 失败回退与照片同构:error 事件 + 8s 挂起超时,dataset 标记防死循环
-  (attachRealwallFallback,缩略图与大图共用)。
+  (attachRealwallFallback);图片懒加载(IntersectionObserver,rootMargin 200px)
+  避免和 1.98MB 粒子数据抢带宽。
 - **要加/换实景图**:改 config.realwall 的 before/after(两张需同机位)→ 重新测 align
-  → 复跑 shot-realwall.js 与 verify.js(两图加载、mask 生效、舞台不溢出、尺寸比断言)。
+  → 复跑 shot-realwall.js 与 verify.js(两图加载、mask 方向、after 宽比与纵向偏移、
+  揭示前/后状态、键盘/触摸滑杆断言)。
 
 ### 拖拽旋转(showcase.js 的 dragRot)
 - pointerdown 按下 → pointermove 累计 angle(dx × 0.006) → 按住时暂停自转
@@ -126,6 +182,17 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
   (重要:触摸用"手势起止总位移"判定,轻触/点击位移≈0 不会误触发)
 
 ### 布局与适配
+- 主题色:首幕底色由 `showcase-config.js` 的 `theme.bg` 写入 WebGL 场景背景,
+  CSS `--bg` 是另一份拷贝(页面底/滚动条),meta theme-color 是第三处;
+  **改首幕底色必须三处同步**。v2.1 定稿为「墨夜宣纸」配色(用户选定):
+  首幕墨夜 `#141311`,后三幕宣纸 `#f4efe6` / 暖灰纸 `#eae3d6` / 米白 `#fbf7ef`;
+  墨 `#1f1b16`、次级 `#5a534a`,朱砂 `#a5452f`(纸面小字 `#8c3826`)只做指引,
+  石绿 `#4a6350`、金 `#a98643` 作辅色。深底上鎏金/米白粒子对比充足,
+  `.hero-vignette` 用暗角 + 圆盘后方极淡暖白顶光(负责景深与视线,不是装饰);
+  Bloom 0.18/0.82。首幕文字反转为宣纸色令牌(`#f4efe6`/`#cfc7ba`/`#a8a093`),
+  强调色提亮为陶土 `#c4705a` / 灰绿 `#a8bfa9` / 浅金 `#c4a76f`。
+  令牌只在 CSS,改配色改 `showcase.css` 顶部 `:root`;`#hero` 与
+  `#loading/#error` 各自重新声明深底令牌(var() 在声明处解析,不能靠继承)。
 - 桌面:左文右图(文字位置由 JS 从 config.referenceTextLayout 注入
   --text-left/--text-top/--text-width=7vw/7vh/32vw,CSS 内 var() 默认值只是兜底——
   改文字位置改 config 而非 CSS;模型中心 ~72% 视口,modelXFraction=0.505)
@@ -144,12 +211,16 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
   (config)、realwall label+缩略图改横向一行、缩略图 76×95→56×66、#body
   line-height 1.9→1.8、features/meta/palette/tags 的 li 与 .meta-label 显式
   line-height(继承 1.9 时 19px 字会变成 36px 行,是溢出主因)、区块间距按
-  0.2-0.4×gapBlock 收紧。改文字区任何尺寸/行高后,静止态收容断言(缩略图底
-  ≥ barTop−8)必须全绿。
+  0.2-0.4×gapBlock 收紧。改文字区任何尺寸/行高后,静止态收容断言必须全绿。
+  (该轮判据是缩略图底 ≥ barTop−8;底栏与缩略图在 v2.1 已移除,现行判据见验证清单。)
 - **手机字号下限(v1.7 tag)**:layout-scale≈0.557 会把 12px 参考字号缩到 6.7px
   (审核 HIGH),正文/特征词/标签/图注加 max(calc(Npx×scale), 11/12/10/10px)
   地板;配合 portrait 收紧(panel 1.6vh、meta gap 6px 等)把 features 底抬到
   364.2(稠密盘上缘 378,留 13.8px)。
+- **竖屏收容(v2.1)**:入口牌与底栏已随 v2.0 一并移除,首幕只剩文字面板与
+  首屏提示条。竖屏 features 底稳定在 ~300(断言上限 376,稠密盘上缘 378);
+  提示条在底部居中、min 44×44,不与面板重叠。改 portrait 布局后必须复跑
+  verify D 组。
 - 触屏设备:关 Bloom、DPR≤1.5
 
 ## 更新模型的完整流程(重要!)
@@ -172,14 +243,21 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
 1. `node --check showcase.js && node --check showcase-config.js`
 2. 本地服务器跑起来(`python tools/serve_debug.py 8137`),Playwright 打开验证
    (**发布前**先加 `RW_LOCAL=1`,否则新 tag 未推出 → three 404 → 整页起不来):
-   - `RW_LOCAL=1 node tools/shot-realwall.js`(擦除对比全流程 + 粒子守卫/对照组)
-   - `RW_LOCAL=1 node tools/verify.js`(多视口布局回归,~2 分钟;内含 errorVisible
-     断言——看门狗 error 面板出现即判失败,杜绝"面板后假绿";v1.7 起静止态
-     契约:waitBody 等打字机 103 字打满再采集,收容断言=桌面缩略图底
-     ≥ barTop−8、meta 底 ≤ 视口高、手机 features 底 ≤ 376 且字号 ≥ 11/10/12;
-     v1.8 起每个视口开一次擦除舞台,断言 after 宽 = before×1.015、纵向偏移
-     = 0.6969%×before 高、舞台整体不溢出视口)
-   - 交互流程:进入升起→稳定→滚轮消散→反向回升(由 shot-realwall.js 对照组覆盖)
+   - `RW_LOCAL=1 node tools/shot-realwall.js`(四幕滚动流交互:首幕文字退场→
+     粒子消散→分栏终态→档案 →CTA 链→指针拖动/键盘滑杆→回顶文字复位与粒子回升;
+     手机 CDP 触摸上滑翻页 + 档案单栏 + 触摸拖动手柄 + 端点淡出)。
+     手机上滑用逐帧 `Input.dispatchTouchEvent`
+     (touchStart→12×touchMove→touchEnd)——`Input.synthesizeScrollGesture`
+     在 headless Edge + isMobile 下是空操作(scrollY 恒 0),别再用它测滚动
+   - `RW_LOCAL=1 node tools/verify.js`(多视口四幕回归,~3 分钟;每个视口断言:
+     首幕静止态收容(meta 底 ≤ 视口高、手机 features 底 ≤ 376 且字号 ≥ 11/10/12)、
+     分栏揭示前状态(blur8/y32/opacity0、图 scale1.08/y20/opacity.4)与揭示终态、
+     档案揭示终态(5 步/6 行/桌面双栏或手机单栏/CTA 指向 #compare)、
+     对比几何(after 宽 = before×1.015、纵向偏移 = 0.6969%×before 高、912:1148)、
+     mask 方向、ARIA 百分比与隐藏侧、键盘 Home/End、指针端点手柄淡出;
+     内含 errorVisible 断言——看门狗 error 面板出现即判失败,杜绝"面板后假绿";
+     waitBody 契约:打字机 103 字打满再采集)
+   - 交互流程:进入升起→稳定→滚轮消散→反向回升(由 shot-realwall.js 覆盖)
 3. 控制台零错误(pageerror 监听)
 4. 粒子数 = 90000(console 日志"实际粒子数量";bin 校验 = 90000)
 5. 视觉抽查:用 ai-router 的 Kimi 视觉模型看截图(Read 图片经常显示失败,
@@ -196,6 +274,8 @@ meta   : u8  × count × 4    [seed, delay, edge, size] 量化
 - `?debug=1` 输出模型矩阵(坐标系排查)
 - `?mode=glb` 临时切 GLB 采样模式
 - `?nowatchdog=1` 跳过 45s 加载看门狗(见部署段)
+- `?local=1` 跳过 CDN 主模块,直接加载工作区 `showcase.js`/`showcase-config.js`
+  (需经本地服务器 http 打开;未发版时预览工作区改动用,three 与图片仍走 CDN 已发版 tag)
 - `?v=<任意>` 页面忽略、仅作缓存破除(verify 每组带不同值防同 URL 缓存)
 
 ## 部署(GitHub Pages + jsDelivr CDN)
@@ -283,8 +363,9 @@ git tag v1.6 && git push origin v1.6 && git push origin master
     实景缩略图 figcaption 继承(19px 特征词变 36px 行,桌面静止态溢出主因)——这
     类元素必须显式设自己的 line-height
 17. tag 已发布后,本地页面加载的是 CDN released 版 config(jsDelivr @v1.x 命中),
-    工作区改动测不到。要测本地新代码,先把 index.html/showcase-config.js 的引用
-    bump 到下一 tag(如 @v1.7),CDN 404 → 回退本地文件才生效(发布前 404 属设计)
+    工作区改动测不到。优先用 `?local=1` 跳过 CDN 主模块(见调试工具);旧办法是
+    把 index.html/showcase-config.js 的引用 bump 到下一 tag(如 @v1.7),
+    CDN 404 → 回退本地文件才生效(发布前 404 属设计)
 18. 回退链给 img.src 重新赋值(CDN→本地)会 abort 旧请求,其迟到的 error 事件
     仍会触发——新资源的 onerror 要防"旧请求迟到 error 误判新资源失败"
     (errCount 首错忽略/比对 src)
@@ -315,6 +396,12 @@ git tag v1.6 && git push origin v1.6 && git push origin master
     crossOrigin 取色 1.5s 通过)。**three 模块在 cdn.jsdelivr.net 上是 .js,不受影响,
     不要"顺手统一"到 gcore**(两主机各有理由,见项目概述)。测试侧配套:两个脚本的
     CDN 拦截通配是 `**/*.jsdelivr.net/**`(覆盖两个 host),新增 CDN 主机时要同步放宽
+23. **祖先元素上的 `will-change: transform` 会让 `position: fixed` 后代相对它定位**
+    (不是相对视口)。v2.0 入口牌踩过:#text-panel 带 will-change: transform,固定定位的
+    入口牌 `left` 被文字列自身的 7vw 偏移顶进粒子盘面。修法:文字面板没有 transform
+    动画,改为 `will-change: opacity` 即可恢复视口基准;若必须保留 transform,则 fixed
+    子元素的坐标要按该祖先的 padding box 折算(而不是视口)。入口牌在 v2.1 已移除,
+    但这条规则对任何新增的 fixed 元素仍然适用。
 
 ## 文案/参数修改入口(showcase-config.js)
 - 文案:categoryEn/titleZh/aliasEn/introZh/introSubZh/bodyZh/features/palette/craftTags
@@ -358,3 +445,23 @@ git tag v1.6 && git push origin v1.6 && git push origin master
   `**/cdn.jsdelivr.net/**` 放宽为 `**/*.jsdelivr.net/**`,verify 的 isCdnHost 与
   缩略图 settle 判定同改(否则 bin/图片的新 host 既拦不到也不算"CDN 上游")。
   three 模块链路未动(照旧 cdn.jsdelivr.net)。
+- v2.0(仅工作区,未发布,**已被 v2.1 取代**):入口牌 + 圆形光斑 overlay 章节。
+  用户复审后认为展示效果不对,整轮推翻,未 commit、未打 tag。
+- v2.1(工作区,待发布,2026-10-18):按 `点云文物提示词.txt` + Ripplix
+  **Editorial Split Feature Reveal** 重写展示结构——保留首幕点云,向下接
+  **第二幕编辑式分栏**(标题逐行 blur(8px)→0 / 上移 32px 错峰,图片
+  scale 1.08→1 推近)、**第三幕青瓷项目档案**(前期规划 5 步 + 材料工序 6 行)
+  与**第四幕同机位对比**(线性 mask 左右分隔 + 实测对齐补偿 1.015 / 0.6969%,
+  羽化 2.2%)。正常文档流滚动,粒子在纸面覆盖前消散、回顶回升。
+  **同日晚间修订**:按用户要求重做配色为「墨夜宣纸」——首幕墨夜 `#141311`,
+  后三幕宣纸 `#f4efe6` / 暖灰纸 `#eae3d6` / 米白 `#fbf7ef`;墨 `#1f1b16`,
+  朱砂 `#a5452f` 只用于小标题短线、CTA 与滑杆,石绿 `#4a6350`、金 `#a98643`
+  作辅色。首幕文字反转为宣纸色;`.hero-vignette`
+  改为暗角 + 圆盘后方极淡暖白顶光;Bloom 0.18/0.82。首幕文字随滚动接力退场
+  (`--hero-exit`);新增项目档案一节(先只写流程与材料,后追加用户确认的
+  2m/7天/4人数字横带);分栏 CTA 改指 `#dossier`。滑杆补 ARIA、键盘、端点
+  指针淡出。测试: verify.js 与 shot-realwall.js 按四幕滚动流更新,
+  五视口 + 桌面/手机交互全绿(RW_LOCAL=1,shot 56/56)。
+  **用户复审修正**:第四幕「叠合补偿」文案行已删除(用户明确要求删掉;
+  此前一轮曾误解为保留),lead 同步去掉补偿说明。`align` 1.015 / 0.6969%
+  只是渲染对齐的内部值,保留不动,不再出现在页面文案里。

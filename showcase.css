@@ -1,27 +1,57 @@
 /* ============================================================
-   showcase.css — 深色展览页 · 国潮四季山水点云展陈
-   主题：深黑绿展览背景 / 鎏金主调 / 米白正文 / 青绿辅助
-   作者：Ligong-Wenchang  日期：2026-08-03
+   showcase.css — 繁荣昌盛 · 点云展陈 / 落地实景 / 项目档案
+   主题：墨夜宣纸——墨夜点云首幕 → 宣纸展墙分栏 → 暖灰纸档案 → 米白同机位对比
+   主色：墨夜 #141311 / 宣纸 #f4efe6 / 墨 #1f1b16 / 朱砂 #a5452f
+   作者：Ligong-Wenchang  日期：2026-10-18
    ============================================================ */
 
 /* ---- 设计令牌 ---- */
 :root {
-  /* 主题色（与 showcase-config.js theme 保持一致） */
-  --bg: #101917;
-  --gold: #dca852;
-  --body: #efe6cf;
-  --body-secondary: rgba(239, 230, 207, 0.68);
-  /* 0.38 时辅助文字(标签/编号/加载)对比度仅 ~3.2:1,低于 4.5:1(v1.7 审计修复) */
-  --body-subtle: rgba(239, 230, 207, 0.52);
-  --accent: #61b89f;
+  /* 墨夜宣纸（全站）：首幕墨夜，后三幕宣纸/暖灰纸/米白；
+     朱砂只做指引（小标题短线、CTA、滑杆），石绿与金作辅色。
+     令牌名沿用旧语义，避免历史选择器失效。 */
+  --bg: #141311;            /* 首幕墨夜墙面 */
+  --bg-deep: #0e0d0b;       /* 同色系暗一档，画框/加载底 */
+  --paper: #f4efe6;         /* 实景幕宣纸 */
+  --paper-raised: #fbf7ef;  /* 对比幕米白 */
+  --dossier-bg: #eae3d6;    /* 档案幕暖灰纸 */
+  --ink: #1f1b16;
+  --ink-soft: #5a534a;
+  --ink-subtle: #6a6156;
+  --ink-line: rgba(31, 27, 22, 0.16);
+  --cinnabar: #a5452f;
+  /* 纸面专用深朱砂：正文级小字对纸底 ≥5:1 */
+  --cinnabar-ink: #8c3826;
+  --cinnabar-deep: #7e3021;
+  --celadon: #5e7a63;
+  --celadon-dark: #4a6350;
+  --gold: #a98643;
+  --gold-soft: #c4a76f;
+
+  /* 旧命名兼容层：全部指向浅色语义，避免历史选择器失效 */
+  --ivory: var(--ink);
+  --ivory-soft: var(--ink-soft);
+  --ivory-subtle: var(--ink-subtle);
+  --terracotta: var(--gold);
 
   /* 字体家族（全部本地/系统回退，不依赖网络） */
   --font-serif: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC",
     "Source Han Serif SC", serif;
-  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  /* 拉丁小标签：Bahnschrift 的测绘感比 Arial 更贴合"实测/机位"的语境 */
+  --font-sans: "Bahnschrift", "DIN Alternate", "Franklin Gothic Medium",
+    "Trebuchet MS", sans-serif;
   --font-body: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB",
     sans-serif;
   --font-alias: Georgia, "Times New Roman", serif;
+
+  /* 动效曲线与时长（与参考效果一致） */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --t-text: 0.65s;
+  --t-image: 0.9s;
+
+  /* 版心与边距 */
+  --gutter: clamp(20px, 7vw, 96px);
+  --measure: 1220px;
 
   /* 布局缩放（JS 写入：layoutScale = min(vw/1280, vh/720)） */
   --layout-scale: 1;
@@ -38,6 +68,7 @@
   /* 间距（随 layoutScale 缩放） */
   --gap-title: 10px;
   --gap-block: 26px;
+  --bottom-margin: 6vw;
 }
 
 * {
@@ -46,21 +77,51 @@
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(207, 199, 186, 0.32) var(--bg);
+}
+
 html,
 body {
   width: 100%;
-  height: 100%;
-  overflow: hidden; /* 禁止滚动条 */
 }
 
 body {
+  min-height: 100%;
+  overflow-x: hidden;
   background: var(--bg);
-  color: var(--body);
+  color: var(--ivory);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
 
-/* ---- 3D 舞台 ---- */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(207, 199, 186, 0.28);
+}
+
+::selection {
+  background: rgba(90, 83, 74, 0.24);
+}
+
+a {
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+}
+
+/* ---- 3D 舞台（固定，纸面章节滚上来覆盖） ---- */
 #stage {
   position: fixed;
   inset: 0;
@@ -71,20 +132,60 @@ body {
   display: block;
   width: 100%;
   height: 100%;
-  touch-action: none; /* 触摸拖动直接控制粒子,不被浏览器滚动拦截 */
+  /* 竖滑交给页面滚动，横滑仍由 JS 接管旋转模型 */
+  touch-action: pan-y;
 }
 
-/* 极弱暗角 + 纸张颗粒质感（不干扰粒子轮廓） */
-#app::before {
-  content: "";
-  position: fixed;
-  inset: 0;
+/* ============================================================
+   第一幕 · 点云展陈
+   ============================================================ */
+#hero {
+  position: relative;
   z-index: 1;
+  height: 100svh;
+  /* 首幕是墨夜底，文字反转为宣纸色；强调色保留色相，
+     但整体提亮以适配深底（朱砂提亮为陶土、石绿提亮为灰绿）。
+     别名必须在此重新声明——var() 在声明处解析，:root 的 --ivory-soft
+     不会跟随子级的 --ink-soft 变化。 */
+  --ink: #f4efe6;
+  --ink-soft: #cfc7ba;
+  --ink-subtle: #a8a093;
+  --ink-line: rgba(244, 239, 230, 0.22);
+  --cinnabar: #c4705a;
+  --celadon-dark: #a8bfa9;
+  --gold: #c4a76f;
+  --ivory: var(--ink);
+  --ivory-soft: var(--ink-soft);
+  --ivory-subtle: var(--ink-subtle);
+  --terracotta: var(--gold);
+}
+
+/* 首幕的色点描边与工艺标签边框要跟着反白，否则墨夜线上看不见 */
+#hero #palette li::before {
+  outline-color: rgba(244, 239, 230, 0.4);
+}
+
+#hero #tags li {
+  border-color: rgba(244, 239, 230, 0.32);
+}
+
+/* 墨夜展厅 + 圆盘顶光 + 纸纤维：只作用于首幕，不压到纸面章节。
+   顶光是一层极淡的暖白渐变，把视线收向圆盘；边缘压暗只负责景深，
+   不承载文字对比度。 */
+.hero-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse at 50% 42%, transparent 62%, rgba(0, 0, 0, 0.22) 100%),
-    repeating-conic-gradient(rgba(239, 230, 207, 0.012) 0 0.5deg, transparent 0.5deg 1deg);
-  mix-blend-mode: normal;
+    radial-gradient(
+      ellipse 48% 72% at 73% 48%,
+      rgba(244, 239, 230, 0.07) 0%,
+      rgba(244, 239, 230, 0.025) 55%,
+      rgba(244, 239, 230, 0) 78%
+    ),
+    radial-gradient(ellipse at 50% 42%, transparent 52%, rgba(0, 0, 0, 0.45) 100%),
+    repeating-conic-gradient(rgba(244, 239, 230, 0.012) 0 0.5deg, transparent 0.5deg 1deg);
 }
 
 /* ---- 左侧文字区 ---- */
@@ -94,7 +195,35 @@ body {
   top: var(--text-top, 7.5vh);
   width: var(--text-width, 32vw);
   z-index: 2;
-  will-change: opacity, transform;
+  /* 只留 opacity:transform 会让 #text-panel 成为 fixed 后代的包含块 */
+  will-change: opacity;
+}
+
+/* 首幕文字随滚动退场：JS 把 0→1 的进度写进 --hero-exit。
+   越靠下的区块位移越大、淡出越快，形成自上而下的接力式上移；
+   0.5vh 内完成，正好接上粒子消散与第二幕覆盖。 */
+#text-panel > * {
+  --exit-y: -28px;
+  --exit-fade: 1.35;
+  translate: 0 calc(var(--hero-exit, 0) * var(--exit-y));
+  opacity: clamp(0, calc(1 - var(--hero-exit, 0) * var(--exit-fade)), 1);
+  will-change: translate, opacity;
+}
+
+#category { --exit-y: -14px; --exit-fade: 1.45; }
+#title { --exit-y: -26px; --exit-fade: 1.2; }
+#alias { --exit-y: -40px; --exit-fade: 1.3; }
+#intro { --exit-y: -52px; --exit-fade: 1.35; }
+#intro-sub { --exit-y: -62px; --exit-fade: 1.4; }
+#body-wrap { --exit-y: -74px; --exit-fade: 1.45; }
+#features { --exit-y: -88px; --exit-fade: 1.5; }
+#meta { --exit-y: -102px; --exit-fade: 1.55; }
+
+/* 首屏提示同步收线，避免文字退场后它还悬在右侧 */
+.hero-cue {
+  opacity: clamp(0, calc(1 - var(--hero-exit, 0) * 1.8), 1);
+  translate: 0 calc(var(--hero-exit, 0) * -18px);
+  transition: opacity 0.3s ease, translate 0.3s ease, color 0.3s ease;
 }
 
 #category {
@@ -103,14 +232,24 @@ body {
   letter-spacing: 0.32em;
   font-weight: 500;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--terracotta);
   line-height: 1.3;
+}
+
+#category::before {
+  content: "";
+  display: inline-block;
+  width: calc(30px * var(--layout-scale));
+  height: 2px;
+  margin-right: calc(12px * var(--layout-scale));
+  vertical-align: middle;
+  background: var(--cinnabar);
 }
 
 #title {
   font-family: var(--font-serif);
   font-size: calc(var(--fs-title) * var(--layout-scale));
-  color: var(--gold);
+  color: var(--ivory);
   font-weight: 600;
   line-height: 1.12;
   letter-spacing: 0.08em;
@@ -120,7 +259,7 @@ body {
 #alias {
   font-family: var(--font-alias);
   font-size: calc(var(--fs-alias) * var(--layout-scale));
-  color: var(--body);
+  color: var(--ivory-soft);
   letter-spacing: 0.3em;
   margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.7);
 }
@@ -128,24 +267,22 @@ body {
 #intro {
   font-family: var(--font-serif);
   font-size: calc(var(--fs-intro) * var(--layout-scale));
-  color: var(--body-secondary);
+  color: var(--ivory-soft);
   margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.75);
 }
 
-/* 引言下的副题(如"汉中福地茶业墙绘")：衬线小字、更淡 */
+/* 引言下的副题(如"汉中福地茶业墙绘")：衬线小字、青瓷色 */
 #intro-sub {
   font-family: var(--font-serif);
   font-size: calc(var(--fs-intro) * var(--layout-scale) * 0.72);
   letter-spacing: 0.16em;
-  color: var(--gold);
-  opacity: 0.82;
+  color: var(--celadon-dark);
   margin-top: calc(var(--gap-title) * var(--layout-scale) * 0.45);
   will-change: opacity, transform;
 }
 
 /* ---- 正文（打字机） ---- */
-/* 行宽由 #text-panel 的 32vw 列宽控制(随视口/缩放连续变化);
-   固定 40em 上限会在高分辨率下限制行宽导致异常换行 */
+/* 行宽由 #text-panel 的 32vw 列宽控制(随视口/缩放连续变化); */
 #body-wrap {
   margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.3);
 }
@@ -153,8 +290,8 @@ body {
 #body {
   font-family: var(--font-body);
   font-size: calc(var(--fs-body) * var(--layout-scale));
-  line-height: 1.8; /* 1.9→1.8:v1.7 收容(v1.6 桌面正文 5 行压出底栏 44px 的组成部分) */
-  color: var(--body-secondary);
+  line-height: 1.8;
+  color: var(--ivory-soft);
   text-align: justify;
 }
 
@@ -162,7 +299,7 @@ body {
   display: inline-block;
   width: 1px;
   height: calc(var(--fs-body) * var(--layout-scale) * 1.3);
-  background: var(--gold);
+  background: var(--terracotta);
   vertical-align: -0.2em;
   margin-left: 2px;
   animation: cursor-blink 0.65s steps(1) infinite;
@@ -175,8 +312,6 @@ body {
 }
 
 /* ---- 特征词 ---- */
-/* li 显式 line-height:不设则继承 #body 的 1.9,19px 字号下行高 36px,
-   3 行特征词吃掉 ~108px,是桌面静止态溢出底栏的主因之一(v1.7 收容) */
 #features {
   list-style: none;
   margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.4);
@@ -189,14 +324,13 @@ body {
   font-family: var(--font-serif);
   font-size: calc(var(--fs-feature) * var(--layout-scale));
   line-height: 1.25;
-  color: var(--gold);
+  color: var(--celadon-dark);
   letter-spacing: 0.12em;
   opacity: 0;
   transform: translateY(8px);
 }
 
 /* ---- 主要颜色 / 工艺线索 ---- */
-/* 图录式上下排布：色板一行、标签一行，避免并排换行压到底部进度条 */
 #meta {
   margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.4);
   display: flex;
@@ -207,11 +341,11 @@ body {
 
 .meta-label {
   display: block;
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: calc(var(--fs-label) * var(--layout-scale));
-  line-height: 1.3; /* 显式:理由同 #palette li */
+  line-height: 1.3;
   letter-spacing: 0.22em;
-  color: var(--body-subtle);
+  color: var(--ivory-subtle);
   margin-bottom: calc(4px * var(--layout-scale));
 }
 
@@ -231,9 +365,9 @@ body {
   align-items: center;
   gap: calc(6px * var(--layout-scale));
   font-size: calc(var(--fs-label) * var(--layout-scale));
-  line-height: 1.3; /* 显式:继承 #body 的 1.9 会把 12px 色名撑成 22.8px 行高,meta 虚高 */
-  color: var(--body-secondary);
-  opacity: 0; /* JS 按 2.75s 后依次淡入 */
+  line-height: 1.3;
+  color: var(--ivory-soft);
+  opacity: 0;
   transition: opacity 0.3s ease, transform 0.3s ease;
   will-change: opacity, transform;
 }
@@ -244,7 +378,7 @@ body {
   height: calc(9px * var(--layout-scale));
   border-radius: 50%;
   background: var(--chip, #dca852);
-  outline: 1px solid rgba(239, 230, 207, 0.25);
+  outline: 1px solid rgba(31, 27, 22, 0.28);
   outline-offset: 1px;
 }
 
@@ -252,225 +386,1074 @@ body {
 #tags li {
   font-family: var(--font-body);
   font-size: calc(var(--fs-label) * var(--layout-scale));
-  line-height: 1.3; /* 显式:理由同 #palette li */
+  line-height: 1.3;
   letter-spacing: 0.08em;
-  color: var(--body-secondary);
-  border: 1px solid rgba(239, 230, 207, 0.3);
+  color: var(--ivory-soft);
+  border: 1px solid rgba(31, 27, 22, 0.28);
   border-radius: 2px;
   padding: calc(2px * var(--layout-scale)) calc(6px * var(--layout-scale));
-  opacity: 0; /* JS 按 2.75s 后依次淡入 */
+  opacity: 0;
   transition: opacity 0.3s ease, transform 0.3s ease;
   will-change: opacity, transform;
 }
 
-/* ---- 落地实景(店面前后对比照片) ---- */
-/* 缩略图:细边框小图,与工艺标签同一边框语言;hover 边框转金 */
-/* 桌面:label 与缩略图同行(meta 竖排会把缩略图压出视口底缘——
-   独立审核实测 5 档桌面视口静止态缩略图 0-3px 可见,v1.7 收容修复) */
-#realwall-wrap {
-  display: flex;
-  align-items: center;
-  gap: calc(10px * var(--layout-scale));
-}
-#realwall-wrap .meta-label {
-  margin-bottom: 0;
-  white-space: nowrap;
-}
-#realwall-thumbs {
-  display: flex;
-  gap: calc(10px * var(--layout-scale));
-}
-
-.realwall-thumb {
-  padding: 0;
-  background: none;
-  border: 1px solid rgba(239, 230, 207, 0.3);
-  border-radius: 2px;
-  cursor: pointer;
-  overflow: hidden;
-  line-height: 0;
-  transition: border-color 0.3s ease;
-}
-
-.realwall-thumb img {
-  display: block;
-  width: calc(56px * var(--layout-scale));
-  height: calc(66px * var(--layout-scale));
-  object-fit: cover;
-  transition: filter 0.3s ease;
-  filter: saturate(0.88) brightness(0.94);
-}
-
-.realwall-thumb:hover,
-.realwall-thumb:focus-visible {
-  border-color: var(--gold);
-}
-
-.realwall-thumb:hover img,
-.realwall-thumb:focus-visible img {
-  filter: none;
-}
-
-.realwall-thumb:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 2px;
-}
-
-/* 擦除对比舞台:全屏遮罩内单张舞台,两图叠放(before 打底 / after 上层被擦除揭示) */
-/* 注意:必须有 [hidden] display:none,否则 flex 会覆盖 hidden 导致遮罩常驻(同 #error 的坑) */
-#realwall-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 8;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(12px, 2.4vh, 24px);
-  padding: clamp(16px, 4vh, 48px);
-  background: rgba(16, 25, 23, 0.96);
-  opacity: 0;
-  transition: opacity 0.25s ease;
-}
-
-#realwall-overlay.show {
-  opacity: 1;
-}
-
-#realwall-overlay[hidden] {
-  display: none;
-}
-
-/* 减少动态偏好:遮罩不再淡入,直接出现(擦除本身是直接拖动的,无动画可关) */
-@media (prefers-reduced-motion: reduce) {
-  #realwall-overlay {
-    transition: none;
-  }
-}
-
-.realwall-stage {
-  margin: 0;
+/* ---- 首屏滚动提示：右侧竖排 ---- */
+.hero-cue {
+  position: absolute;
+  right: clamp(10px, 2vw, 30px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 12px 8px;
+  /* 提示条落在首幕右侧的暗角里；宣纸色对墨夜底 >12:1 */
+  color: var(--ivory-soft);
+  text-decoration: none;
+  transition: opacity 0.3s ease, translate 0.3s ease, color 0.3s ease;
+}
+
+.hero-cue-text {
+  writing-mode: vertical-rl;
+  font-family: var(--font-body);
+  font-size: max(calc(10px * var(--layout-scale)), 10px);
+  letter-spacing: 0.26em;
+  line-height: 1;
+}
+
+.hero-cue-line {
+  width: 1px;
+  height: clamp(36px, 7vh, 64px);
+  background: linear-gradient(to bottom, transparent, var(--cinnabar));
+  transition: height 0.3s ease;
+}
+
+.hero-cue:hover {
+  color: var(--ivory);
+}
+
+.hero-cue:hover .hero-cue-line {
+  height: clamp(44px, 8vh, 74px);
+}
+
+.hero-cue:focus-visible {
+  outline: 2px solid var(--cinnabar);
+  outline-offset: 3px;
+}
+
+/* ============================================================
+   第二幕 · 展墙纸面 · 编辑式分栏揭示
+   ============================================================ */
+.feature {
+  position: relative;
+  z-index: 4;
+  background: var(--paper);
+  color: var(--ink);
+  padding: clamp(76px, 13vh, 150px) var(--gutter) clamp(84px, 14vh, 160px);
+}
+
+/* 展墙挂线：只在版心边距内画一条细线 */
+.feature::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--gutter);
+  right: var(--gutter);
+  height: 1px;
+  background: var(--ink-line);
+}
+
+/* 一幕 → 二幕的颜色过渡：贴在纸面上缘外侧的日出羽化带。
+   下缘与 --paper 完全同色，向上经沙金、陶土过渡到透明，
+   滚动时整条带随第二幕一起升过墨夜底——边界不是一刀切，
+   而是纸面把晨光先推上来。高度限制在 22vh，窄屏也不会把首幕染亮。 */
+.feature-dawn {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  /* 高度由滚动进度控制（0→0.16vh 内展开）：静止时高度为 0，
+     首屏保持纯墨夜；一开始下滚，羽化带才从纸边"长"出来。 */
+  height: calc(clamp(140px, 22vh, 280px) * var(--dawn-band, 0));
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    var(--paper) 0%,
+    #f3e9d9 26%,
+    rgba(224, 188, 141, 0.72) 52%,
+    rgba(197, 138, 96, 0.38) 70%,
+    rgba(165, 69, 47, 0.14) 86%,
+    rgba(165, 69, 47, 0) 100%
+  );
+}
+
+/* 带内一层暖光缓慢呼吸，让过渡有活的质感；
+   transform 只作用在这层光上，不改变羽化带的几何边界。 */
+.feature-dawn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 62% 46% at 50% 78%,
+    rgba(255, 243, 220, 0.5),
+    rgba(255, 243, 220, 0) 72%
+  );
+  opacity: 0.5;
+  animation: dawn-breathe 7.5s ease-in-out infinite alternate;
+}
+
+@keyframes dawn-breathe {
+  from {
+    opacity: 0.34;
+    transform: translateY(4%);
+  }
+  to {
+    opacity: 0.62;
+    transform: translateY(-4%);
+  }
+}
+
+.feature-inner {
+  max-width: var(--measure);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: clamp(40px, 7vw, 116px);
+  align-items: center;
+}
+
+.feature-copy {
+  min-width: 0;
+  max-width: 560px;
+}
+
+.feature-kicker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  color: var(--cinnabar-ink);
+}
+
+.feature-kicker::before {
+  content: "";
+  flex: none;
+  width: 26px;
+  height: 1px;
+  background: var(--cinnabar-ink);
+}
+
+.feature-title {
+  margin-top: clamp(18px, 3vh, 30px);
+  font-family: var(--font-serif);
+  font-size: clamp(40px, 5vw, 72px);
+  font-weight: 600;
+  line-height: 1.14;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+/* 逐行遮罩：外层裁切，内层上移 + 去模糊 */
+.split-line {
+  display: block;
+  overflow: hidden;
+  padding-block: 0.14em;
+  margin-block: -0.14em;
+}
+
+.split-line > span {
+  display: block;
+  opacity: 0;
+  transform: translateY(32px);
+  filter: blur(8px);
+  transition:
+    opacity var(--t-text) var(--ease-out),
+    transform var(--t-text) var(--ease-out),
+    filter var(--t-text) var(--ease-out);
+  transition-delay: calc(100ms + var(--i, 0) * 80ms);
+}
+
+.feature.is-revealed .split-line > span {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0px);
+}
+
+.feature-rule {
+  width: 44px;
+  height: 2px;
+  margin-top: clamp(22px, 3.4vh, 30px);
+  background: var(--cinnabar-ink);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--t-text) var(--ease-out) 280ms;
+}
+
+.feature.is-revealed .feature-rule {
+  transform: scaleX(1);
+}
+
+.feature-lead {
+  margin-top: clamp(22px, 3.4vh, 32px);
+  max-width: 33em;
+  font-family: var(--font-body);
+  font-size: clamp(15px, 1.15vw, 17px);
+  line-height: 1.9;
+  color: var(--ink-soft);
+}
+
+/* 项目事实：图录式，上细线 + 两列 */
+.feature-facts {
+  margin-top: clamp(30px, 5vh, 44px);
+  padding-top: 20px;
+  border-top: 1px solid var(--ink-line);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 28px;
+}
+
+.feature-facts div {
   min-width: 0;
 }
 
-/* 画框尺寸由 before 在文档流内撑开,after 绝对定位叠上去不参与撑高。
-   after 放大 1.015 后比画框高约 2.8%,底部溢出由 overflow 裁掉——
-   落在画面最底部的灰地砖上,视觉无损(见 config.realwall.align 注释) */
-.realwall-frame {
+.feature-facts dt {
+  font-family: var(--font-body);
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: 0.22em;
+  color: var(--ink-soft);
+}
+
+.feature-facts dd {
+  margin-top: 5px;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+
+.feature-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin-top: clamp(28px, 4.4vh, 40px);
+  padding: 9px 0 10px;
   position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(239, 230, 207, 0.35);
-  line-height: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  color: var(--cinnabar-ink);
+  text-decoration: none;
 }
 
-.realwall-img {
-  display: block;
-  max-width: min(38vw, 520px);
-  max-height: 76vh;
-  width: auto;
-  height: auto;
-}
-
-/* 对齐补偿与羽化参数全部由 JS 从 config 注入(--rw-scale / --rw-offset-y / --rw-feather),
-   此处 var() 默认值只是兜底,与 config 保持一致——改补偿值改 config,别改这里。
-   百分比写法让补偿随舞台自适应缩放,不写死 px。 */
-.realwall-img--after {
+.feature-cta::after {
+  content: "";
   position: absolute;
-  top: var(--rw-offset-y, 0.697%);
-  left: calc((100% - var(--rw-scale, 101.5%)) / 2);
-  width: var(--rw-scale, 101.5%);
-  max-width: none;
-  max-height: none;
-  /* 羽化揭示:渐变首尾颜色会向两端自动延伸,所以只写两个端点即可——
-     edge 左侧是实心黑(after 完全显示),右侧是透明(完全隐藏)。
-     JS 把 --wipe-edge 映射到 [-feather, 1+feather] 区间,保证 0/1 两端无半透明残留。 */
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0.34);
+  transform-origin: left center;
+  transition: transform 0.3s ease;
+}
+
+.feature-cta:hover::after,
+.feature-cta:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.feature-cta-arrow {
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.feature-cta:hover .feature-cta-arrow,
+.feature-cta:focus-visible .feature-cta-arrow {
+  transform: translateY(3px);
+}
+
+.feature-cta:focus-visible {
+  outline: 2px solid var(--cinnabar-ink);
+  outline-offset: 4px;
+}
+
+/* ---- 右侧装裱照片 ---- */
+.feature-media {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.feature-media-frame {
+  position: relative;
+  height: min(600px, 68svh);
+  aspect-ratio: 4 / 5;
+  max-width: 100%;
+  padding: 10px;
+  overflow: hidden;
+  background: var(--paper-raised);
+  border: 1px solid var(--ink-line);
+}
+
+.feature-media-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 30%;
+  opacity: 0.4;
+  transform: translateY(20px) scale(1.08);
+  transition:
+    opacity var(--t-image) var(--ease-out),
+    transform var(--t-image) var(--ease-out);
+  transition-delay: calc(100ms + var(--line-count, 2) * 80ms);
+}
+
+.feature.is-revealed .feature-media-frame img {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.feature-media figcaption {
+  width: 100%;
+  margin-top: 14px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.16em;
+  color: var(--ink-soft);
+  text-align: right;
+}
+
+.feature-media figcaption::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 8px;
+  vertical-align: 1px;
+  background: var(--ink-subtle);
+}
+
+/* ============================================================
+   第三幕 · 项目档案（前期规划 + 施工材料与工序）
+   ============================================================ */
+.dossier {
+  position: relative;
+  z-index: 4;
+  background:
+    linear-gradient(to bottom, rgba(251, 247, 239, 0.35), transparent 24%),
+    var(--dossier-bg);
+  color: var(--ink);
+  padding: clamp(72px, 12vh, 138px) var(--gutter) clamp(76px, 12vh, 140px);
+}
+
+.dossier::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--gutter);
+  right: var(--gutter);
+  height: 1px;
+  background: var(--ink-line);
+}
+
+.dossier-inner {
+  max-width: var(--measure);
+  margin: 0 auto;
+}
+
+.dossier-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: clamp(28px, 6vw, 96px);
+  align-items: end;
+}
+
+.dossier-kicker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  color: var(--cinnabar-ink);
+}
+
+.dossier-kicker::before {
+  content: "";
+  flex: none;
+  width: 26px;
+  height: 1px;
+  background: var(--cinnabar-ink);
+}
+
+.dossier-title {
+  margin-top: clamp(18px, 3vh, 30px);
+  font-family: var(--font-serif);
+  font-size: clamp(40px, 5vw, 72px);
+  font-weight: 600;
+  line-height: 1.14;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+/* 与第二幕共用逐行揭示的节奏，但父级选择器独立，方便两幕分别触发 */
+.dossier .split-line > span {
+  display: block;
+  opacity: 0;
+  transform: translateY(32px);
+  filter: blur(8px);
+  transition:
+    opacity var(--t-text) var(--ease-out),
+    transform var(--t-text) var(--ease-out),
+    filter var(--t-text) var(--ease-out);
+  transition-delay: calc(100ms + var(--i, 0) * 80ms);
+}
+
+.dossier.is-revealed .split-line > span {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0px);
+}
+
+.dossier-lead {
+  max-width: 34em;
+  padding-bottom: 6px;
+  font-family: var(--font-body);
+  font-size: clamp(15px, 1.15vw, 17px);
+  line-height: 1.9;
+  color: var(--ink-soft);
+  opacity: 0;
+  translate: 0 18px;
+  transition: opacity var(--t-text) var(--ease-out) 180ms,
+    translate var(--t-text) var(--ease-out) 180ms;
+}
+
+.dossier.is-revealed .dossier-lead {
+  opacity: 1;
+  translate: 0 0;
+}
+
+/* 项目数字：全幅三栏，上下细线，像一张实测记录表。
+   数字只用已确认的直径 2m / 工期 7 天 / 人数 4 人，不补推估值。 */
+.dossier-stats {
+  margin: clamp(38px, 6.5vh, 66px) 0 0;
+  padding: clamp(18px, 2.6vh, 26px) 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--ink-line);
+  border-bottom: 1px solid var(--ink-line);
+  opacity: 0;
+  translate: 0 16px;
+  transition: opacity var(--t-text) var(--ease-out),
+    translate var(--t-text) var(--ease-out);
+}
+
+.dossier.is-revealed .dossier-stats {
+  opacity: 1;
+  translate: 0 0;
+  transition-delay: 140ms;
+}
+
+/* 没有配置数字时不留下两条空细线 */
+.dossier-stats:empty {
+  display: none;
+}
+
+.dossier-stats > div {
+  min-width: 0;
+  padding-left: clamp(16px, 2.6vw, 34px);
+}
+
+.dossier-stats > div:first-child {
+  padding-left: 0;
+}
+
+.dossier-stats > div + div {
+  border-left: 1px solid var(--ink-line);
+}
+
+.dossier-stat-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--ink-subtle);
+}
+
+.dossier-stat-value {
+  margin: 6px 0 0;
+  font-family: var(--font-serif);
+  font-size: clamp(34px, 3.6vw, 52px);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.dossier-stat-unit {
+  margin-left: 4px;
+  font-size: 0.38em;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.dossier-grid {
+  margin-top: clamp(46px, 8vh, 84px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+  gap: clamp(40px, 7vw, 112px);
+  align-items: start;
+}
+
+/* 数字带已经拉开一屏节奏，下面的双栏不必再留一整段空 */
+.dossier-stats + .dossier-grid {
+  margin-top: clamp(34px, 5.5vh, 56px);
+}
+
+.dossier-plan,
+.dossier-ledger {
+  min-width: 0;
+  opacity: 0;
+  translate: 0 22px;
+  transition: opacity var(--t-text) var(--ease-out),
+    translate var(--t-text) var(--ease-out);
+}
+
+.dossier.is-revealed .dossier-plan {
+  opacity: 1;
+  translate: 0 0;
+  transition-delay: 220ms;
+}
+
+.dossier.is-revealed .dossier-ledger {
+  opacity: 1;
+  translate: 0 0;
+  transition-delay: 320ms;
+}
+
+.dossier-subtitle {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ink-line);
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.24em;
+  color: var(--ink-soft);
+}
+
+/* 时间线：编号对应真实的施工顺序，不是装饰 */
+.dossier-steps {
+  list-style: none;
+  counter-reset: dossier-step;
+}
+
+.dossier-steps li {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 16px;
+  padding: 19px 0 20px;
+  border-bottom: 1px solid var(--ink-line);
+}
+
+.dossier-steps li::before {
+  counter-increment: dossier-step;
+  content: counter(dossier-step, decimal-leading-zero);
+  padding-top: 3px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.12em;
+  color: var(--ink-subtle);
+}
+
+.step-title {
+  font-family: var(--font-serif);
+  font-size: clamp(17px, 1.45vw, 20px);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.step-text {
+  margin-top: 7px;
+  max-width: 36em;
+  font-family: var(--font-body);
+  font-size: clamp(13px, 0.98vw, 14px);
+  line-height: 1.85;
+  color: var(--ink-soft);
+}
+
+.dossier-materials {
+  margin-top: 0;
+}
+
+.dossier-materials div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 17px;
+  padding: 15px 0 16px;
+  border-bottom: 1px solid var(--ink-line);
+}
+
+.dossier-materials dt {
+  font-family: var(--font-body);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.2em;
+  color: var(--ink-subtle);
+}
+
+.dossier-materials dd {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: 0.03em;
+  color: var(--ink);
+}
+
+.dossier-note {
+  margin-top: 20px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.7;
+  letter-spacing: 0.08em;
+  color: var(--ink-subtle);
+}
+
+.dossier-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin-top: clamp(18px, 3vh, 28px);
+  position: relative;
+  font-family: var(--font-body);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  color: var(--cinnabar-ink);
+  text-decoration: none;
+}
+
+.dossier-cta::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0.34);
+  transform-origin: left center;
+  transition: transform 0.3s ease;
+}
+
+.dossier-cta:hover::after,
+.dossier-cta:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.dossier-cta-arrow {
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.dossier-cta:hover .dossier-cta-arrow,
+.dossier-cta:focus-visible .dossier-cta-arrow {
+  transform: translateY(3px);
+}
+
+.dossier-cta:focus-visible {
+  outline: 2px solid var(--cinnabar-ink);
+  outline-offset: 4px;
+}
+
+/* ============================================================
+   第四幕 · 同机位前后对比
+   ============================================================ */
+.compare {
+  position: relative;
+  z-index: 5;
+  background:
+    radial-gradient(ellipse at 72% 38%, rgba(169, 134, 67, 0.07), transparent 62%),
+    var(--paper-raised);
+  color: var(--ivory);
+  padding: clamp(76px, 12vh, 140px) var(--gutter) 0;
+}
+
+.compare-inner {
+  max-width: var(--measure);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1fr);
+  gap: clamp(40px, 6vw, 100px);
+  align-items: center;
+}
+
+.compare-head {
+  min-width: 0;
+}
+
+.compare-kicker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  color: var(--celadon-dark);
+}
+
+.compare-kicker::before {
+  content: "";
+  flex: none;
+  width: 26px;
+  height: 1px;
+  background: var(--celadon-dark);
+}
+
+.compare-title {
+  margin-top: clamp(18px, 3vh, 28px);
+  font-family: var(--font-serif);
+  font-size: clamp(32px, 3.6vw, 56px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+  color: var(--ivory);
+  /* 窄列时避免末字孤行（"…在一起 / 看"），由浏览器均分两行 */
+  text-wrap: balance;
+}
+
+.compare-lead {
+  margin-top: clamp(20px, 3vh, 28px);
+  max-width: 30em;
+  font-family: var(--font-body);
+  font-size: clamp(14px, 1.05vw, 16px);
+  line-height: 1.9;
+  color: var(--ivory-soft);
+}
+
+.compare-spec {
+  margin-top: clamp(26px, 4vh, 36px);
+  padding-top: 18px;
+  border-top: 1px solid rgba(31, 27, 22, 0.14);
+  display: grid;
+  gap: 14px;
+}
+
+.compare-spec div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 14px;
+  align-items: baseline;
+}
+
+.compare-spec dt {
+  font-family: var(--font-body);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: 0.18em;
+  color: var(--ivory-subtle);
+}
+
+.compare-spec dd {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  color: var(--ivory);
+}
+
+.compare-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: clamp(24px, 3.6vh, 34px);
+  font-family: var(--font-body);
+  font-size: max(11px, 10px);
+  line-height: 1.6;
+  letter-spacing: 0.14em;
+  color: var(--ivory-subtle);
+}
+
+.compare-hint::before {
+  content: "";
+  flex: none;
+  width: 18px;
+  height: 1px;
+  background: var(--cinnabar);
+}
+
+/* ---- 对比画框 ---- */
+.cmp-figure {
+  margin: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.cmp-frame {
+  position: relative;
+  width: min(100%, calc(78svh * 0.794));
+  max-width: 560px;
+  /* 与 before 源图 912×1148 同比例：图片未加载时也先占好高度，避免版面跳动 */
+  aspect-ratio: 912 / 1148;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(31, 27, 22, 0.22);
+  background: var(--bg-deep);
+  line-height: 0;
+  cursor: ew-resize;
+  /* 横向拖动交给分隔线；纵向滑动仍然滚动页面 */
+  touch-action: pan-y;
+  /* 对齐补偿由 JS 从 config 注入；默认值只是兜底 */
+  --cmp-scale: 101.5%;
+  --cmp-offset-y: 0.6969%;
+  --cmp-feather: 2.2%;
+  --cmp-pos: 50%;
+}
+
+.cmp-img {
+  display: block;
+}
+
+.cmp-img--before {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* after 层：整层按分隔线位置做线性羽化遮罩，after 图按实测补偿放大下移 */
+.cmp-after-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
   -webkit-mask-image: linear-gradient(
     to right,
-    #000 calc(var(--wipe-edge, -6%) - var(--rw-feather, 6%)),
-    transparent calc(var(--wipe-edge, -6%) + var(--rw-feather, 6%))
+    transparent 0%,
+    transparent calc(var(--cmp-pos) - var(--cmp-feather)),
+    #000 var(--cmp-pos),
+    #000 100%
   );
   mask-image: linear-gradient(
     to right,
-    #000 calc(var(--wipe-edge, -6%) - var(--rw-feather, 6%)),
-    transparent calc(var(--wipe-edge, -6%) + var(--rw-feather, 6%))
+    transparent 0%,
+    transparent calc(var(--cmp-pos) - var(--cmp-feather)),
+    #000 var(--cmp-pos),
+    #000 100%
   );
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
 }
 
-.realwall-stage figcaption {
-  font-family: var(--font-serif);
-  font-size: calc(13px * var(--layout-scale));
-  letter-spacing: 0.18em;
-  color: var(--body-secondary);
-  text-align: center;
-}
-
-/* 操作提示:默认无人在遮罩内预期滚轮有效,不给提示这个功能就是隐形的 */
-.realwall-hint {
-  font-family: var(--font-sans);
-  font-size: calc(12px * var(--layout-scale));
-  letter-spacing: 0.2em;
-  color: var(--body-subtle);
-  text-align: center;
-}
-
-/* 关闭按钮:右上角,细边框,与整体控件同一语言 */
-#realwall-close {
+.cmp-img--after {
   position: absolute;
-  top: clamp(14px, 2.6vh, 28px);
-  right: clamp(14px, 2.6vw, 32px);
+  top: var(--cmp-offset-y);
+  left: calc((100% - var(--cmp-scale)) / 2);
+  width: var(--cmp-scale);
+  max-width: none;
+  height: auto;
+}
+
+/* 左右标签：纸底墨字，不靠颜色单独传达 */
+.cmp-tag {
+  position: absolute;
+  top: 12px;
+  z-index: 2;
+  padding: 5px 8px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+  background: rgba(251, 247, 239, 0.94);
+  border: 1px solid rgba(31, 27, 22, 0.14);
+  border-radius: 1px;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+/* 被完全遮住的一侧，标签也一起淡出，避免标签压在没有内容的画面上 */
+.cmp-frame[data-edge="start"] .cmp-tag--before,
+.cmp-frame[data-edge="end"] .cmp-tag--after {
+  opacity: 0;
+}
+
+.cmp-tag--before {
+  left: 12px;
+}
+
+.cmp-tag--after {
+  right: 12px;
+}
+
+/* 分隔线 + 朱砂手柄 */
+.cmp-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--cmp-pos);
+  z-index: 3;
+  width: 44px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: ew-resize;
+  touch-action: none;
+  transition: opacity 0.18s ease;
+}
+
+/* 指针拖到两端时手柄有一半会被画框裁成红边，整只淡出；
+   键盘操作（data-input="key"）不淡出，保留焦点环 */
+.cmp-frame[data-edge][data-input="pointer"] .cmp-handle {
+  opacity: 0;
+}
+
+.cmp-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: rgba(31, 27, 22, 0.55);
+  box-shadow: 0 0 0 1px rgba(251, 247, 239, 0.6);
+}
+
+.cmp-handle-grip {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
   width: 44px;
   height: 44px;
+  border-radius: 50%;
+  background: var(--cinnabar);
+  color: #fbf7ef;
   font-family: var(--font-sans);
-  font-size: 24px;
+  font-size: 15px;
   line-height: 1;
-  color: var(--body-secondary);
-  background: transparent;
-  border: 1px solid rgba(239, 230, 207, 0.3);
-  border-radius: 3px;
-  cursor: pointer;
+  box-shadow: 0 2px 14px rgba(31, 27, 22, 0.22);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.cmp-handle:hover .cmp-handle-grip {
+  background: var(--cinnabar-deep);
+  transform: scale(1.06);
+}
+
+.cmp-handle:focus-visible {
+  outline: none;
+}
+
+.cmp-handle:focus-visible .cmp-handle-grip {
+  outline: 2px solid var(--ivory);
+  outline-offset: 3px;
+}
+
+.cmp-handle:focus-visible::before {
+  background: var(--cinnabar);
+}
+
+.cmp-figure figcaption {
+  margin-top: 12px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  line-height: 1.6;
+  letter-spacing: 0.16em;
+  color: var(--ivory-subtle);
+  text-align: center;
+}
+
+/* ---- 页脚 ---- */
+.site-foot {
+  max-width: var(--measure);
+  margin: clamp(56px, 9vh, 110px) auto 0;
+  padding: 22px 0 34px;
+  border-top: 1px solid rgba(31, 27, 22, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.7;
+  letter-spacing: 0.14em;
+  color: var(--ivory-subtle);
+}
+
+.site-foot-title {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--ivory-soft);
+}
+
+.site-foot-title span {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--ivory-subtle);
+}
+
+.site-foot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 2px;
+  color: var(--ivory-soft);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
   transition: color 0.3s ease, border-color 0.3s ease;
 }
 
-#realwall-close:hover,
-#realwall-close:focus-visible {
-  color: var(--gold);
-  border-color: var(--gold);
+.site-foot a:hover,
+.site-foot a:focus-visible {
+  color: var(--ivory);
+  border-bottom-color: var(--cinnabar);
 }
 
-#realwall-close:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 2px;
+.site-foot a:focus-visible {
+  outline: 2px solid var(--cinnabar);
+  outline-offset: 3px;
 }
 
-/* ---- 底部界面 ---- */
-#bottom-bar {
-  position: fixed;
-  left: var(--bottom-margin, 6vw);
-  right: var(--bottom-margin, 6vw);
-  bottom: calc(3.2vh);
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start; /* 底部仅保留编号(counter),置左 */
+/* ============================================================
+   加载 / 错误状态
+   两个覆盖层都压在炭灰舞台上，必须反转为浅灰字，
+   否则 :root 的浅色语义令牌会让文字与底色同深。
+   ============================================================ */
+#loading,
+#error {
+  --ink: #f4efe6;
+  --ink-soft: #cfc7ba;
+  --ink-subtle: #a8a093;
+  --ivory: var(--ink);
+  --ivory-soft: var(--ink-soft);
+  --ivory-subtle: var(--ink-subtle);
+  --cinnabar: #c4705a;
+  --terracotta: #c4a76f;
 }
 
-#counter {
-  font-family: var(--font-sans);
-  font-size: calc(12px * var(--layout-scale));
-  letter-spacing: 0.18em;
-  color: var(--body-subtle);
-  white-space: nowrap;
-}
-
-/* ---- 加载 / 错误状态 ---- */
 #loading {
   position: fixed;
   inset: 0;
@@ -479,6 +1462,7 @@ body {
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  background: var(--bg);
   transition: opacity 0.5s ease;
 }
 
@@ -486,13 +1470,14 @@ body {
   font-family: var(--font-serif);
   font-size: calc(15px * var(--layout-scale));
   letter-spacing: 0.3em;
-  color: var(--body-subtle);
+  color: var(--ivory);
   animation: loading-pulse 2s ease-in-out infinite;
 }
 
+/* 脉冲下限 0.55：再暗就会跌破炭灰底上的 4.5:1，加载文案也属正文 */
 @keyframes loading-pulse {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 0.9; }
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.95; }
 }
 
 #error {
@@ -505,11 +1490,10 @@ body {
   justify-content: center;
   gap: 18px;
   background: var(--bg);
-  color: var(--body);
+  color: var(--ivory);
 }
 
-/* 修复：display:flex 会覆盖 HTML hidden 属性，导致错误面板从加载起就
-   全屏遮住展陈画面。必须显式让 hidden 优先。 */
+/* display:flex 会覆盖 HTML hidden 属性，必须显式让 hidden 优先 */
 #error[hidden] {
   display: none;
 }
@@ -522,9 +1506,9 @@ body {
 #reload {
   font-family: var(--font-body);
   font-size: 13px;
-  color: var(--body);
+  color: var(--ivory);
   background: transparent;
-  border: 1px solid rgba(239, 230, 207, 0.4);
+  border: 1px solid rgba(244, 239, 230, 0.32);
   border-radius: 3px;
   padding: 8px 22px;
   cursor: pointer;
@@ -532,99 +1516,273 @@ body {
 }
 
 #reload:hover {
-  color: var(--gold);
-  border-color: var(--gold);
+  color: var(--terracotta);
+  border-color: var(--terracotta);
 }
 
 #reload:focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--cinnabar);
   outline-offset: 2px;
 }
 
-/* ---- 竖屏(手机)适配 ---- */
-/* 文字区移到上端、加宽;模型由 JS 居中下移;底部控件收紧 */
+/* ============================================================
+   响应式
+   ============================================================ */
+
+/* 平板/窄屏：分栏改为上下 */
+@media (max-width: 980px) {
+  .feature-inner,
+  .compare-inner,
+  .dossier-head,
+  .dossier-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dossier-lead {
+    margin-top: 22px;
+  }
+
+  .feature-copy {
+    max-width: 620px;
+  }
+
+  .feature-media {
+    align-items: flex-start;
+  }
+
+  .feature-media-frame {
+    width: 100%;
+    max-width: 560px;
+    height: auto;
+    aspect-ratio: 4 / 5;
+  }
+
+  .compare-head {
+    max-width: 620px;
+  }
+
+  .cmp-figure {
+    margin-top: 40px;
+  }
+}
+
+/* 小屏：数字带保持三栏，收紧内边距与字距 */
+@media (max-width: 560px) {
+  .dossier-stats {
+    padding: 16px 0;
+  }
+
+  .dossier-stats > div {
+    padding-left: 12px;
+  }
+
+  .dossier-stat-label {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+  }
+
+  .dossier-stat-value {
+    font-size: 30px;
+  }
+}
+
+/* 竖屏（手机）：文字区在上端，模型由 JS 居中下移 */
 @media (orientation: portrait) {
-  /* v1.6 为 3.5vh;字号下限使文本列增高,顶部与块间 margin 同步收紧,
-     features 底不得越过粒子稠密区上缘(实测 ~378px,视觉复查后留 ≥14px 空距) */
+  /* 竖屏圆盘居中下移，顶光跟着回到画面中央 */
+  .hero-vignette {
+    background:
+      radial-gradient(
+        ellipse 44% 25% at 50% 59%,
+        rgba(244, 239, 230, 0.06) 0%,
+        rgba(244, 239, 230, 0.025) 52%,
+        rgba(244, 239, 230, 0) 78%
+      ),
+      radial-gradient(ellipse at 50% 42%, transparent 52%, rgba(0, 0, 0, 0.4) 100%),
+      repeating-conic-gradient(rgba(244, 239, 230, 0.012) 0 0.5deg, transparent 0.5deg 1deg);
+  }
+
   #text-panel {
     left: 7vw;
     top: 1.6vh;
     width: 86vw;
-    /* 手机端改为纵向 flex, 用 order 把"主要颜色/工艺线索"移到正文(四季山水)上方 */
     display: flex;
     flex-direction: column;
   }
+
   #meta {
     order: 1;
     margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.2);
-    gap: calc(6px * var(--layout-scale)); /* v1.6 为 10px,随字号下限收紧 */
+    gap: calc(6px * var(--layout-scale));
   }
-  /* 竖屏块距:v1.6 为 0.5,随字号下限同步收紧(总高预算见 top 注释) */
-  #body-wrap { margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.25); }
-  #body-wrap { order: 2; }
+
+  #body-wrap {
+    order: 2;
+    margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.25);
+    max-width: none;
+  }
+
   #features {
     order: 3;
     flex-direction: row;
     flex-wrap: wrap;
     gap: calc(4px * var(--layout-scale)) calc(14px * var(--layout-scale));
-    margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.2); /* v1.6 为 0.4 */
+    margin-top: calc(var(--gap-block) * var(--layout-scale) * 0.2);
   }
-  #body-wrap {
-    max-width: none;
-  }
-  #bottom-bar {
-    bottom: 2.6vh;
-  }
-  /* 竖屏 layout-scale≈0.55 会把 12px 编号缩到 ~7px 不可读,设最小字号下限 */
-  #counter {
-    font-size: max(calc(12px * var(--layout-scale)), 12px);
-  }
-  /* ---- 竖屏字号下限(v1.7):layout-scale≈0.55 会把正文字缩到 ~7.8px 不可读,
-     审计 HIGH;下限取可读阈值,几何影响由同轮 realwall 横排/间距收紧对冲 ---- */
+
+  /* layout-scale≈0.55 会把正文缩到 ~7.8px，设可读下限 */
   #body {
     font-size: max(calc(var(--fs-body) * var(--layout-scale)), 11px);
-    line-height: 1.7; /* 桌面 1.8 保留;竖屏行距随字号下限同步调密,控文本列总高 */
+    line-height: 1.7;
   }
+
   .meta-label,
   #palette li,
   #tags li {
     font-size: max(calc(var(--fs-label) * var(--layout-scale)), 10px);
   }
+
   #features li {
     font-size: max(calc(var(--fs-feature) * var(--layout-scale)), 12px);
   }
-  .realwall-stage figcaption,
-  .realwall-hint {
-    font-size: max(calc(13px * var(--layout-scale)), 10px);
+
+  /* 首屏提示改为底部横排，避开居中下移的圆盘 */
+  .hero-cue {
+    top: auto;
+    bottom: 2.4vh;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    flex-direction: row;
+    gap: 10px;
+    padding: 10px 12px;
   }
-  /* 落地实景:缩略图按视口宽取值(layout-scale 在窄屏下太小)。
-     realwall 区随桌面基础规则走横排(label 与缩略图同行),省出原竖排
-     label 行高,对冲上方字号下限带来的增高 */
-  .realwall-thumb img {
-    width: 12vw;
-    height: 15vw;
+
+  .hero-cue-text {
+    writing-mode: horizontal-tb;
+    font-size: max(calc(10px * var(--layout-scale)), 10px);
+    letter-spacing: 0.18em;
   }
-  #realwall-overlay {
+
+  .hero-cue-line {
+    width: 34px;
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--cinnabar));
+  }
+
+  .hero-cue:hover .hero-cue-line {
+    width: 44px;
+    height: 1px;
+  }
+
+  .feature-title {
+    font-size: clamp(36px, 9.6vw, 52px);
+  }
+
+  .dossier-title {
+    font-size: clamp(36px, 9.6vw, 52px);
+  }
+
+  .dossier-steps li {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px 0 17px;
+  }
+
+  .dossier-materials div {
+    grid-template-columns: 56px minmax(0, 1fr);
     gap: 14px;
-    overflow-y: auto;
   }
-  /* 舞台按 before 定尺寸,after 百分比跟随缩放,竖屏只需压 before 的框 */
-  .realwall-img--before {
-    max-width: 78vw;
-    max-height: 36vh;
+
+  .compare-title {
+    font-size: clamp(30px, 8vw, 42px);
+  }
+
+  .feature-facts {
+    gap: 14px 20px;
+  }
+
+  .cmp-tag {
+    top: 8px;
+    font-size: 9px;
+  }
+
+  .cmp-tag--before {
+    left: 8px;
+  }
+
+  .cmp-tag--after {
+    right: 8px;
+  }
+
+  .site-foot {
+    font-size: 10px;
+  }
+}
+
+/* 低高度横屏：收紧首屏提示，避免压到圆盘 */
+@media (orientation: landscape) and (max-height: 620px) {
+  .hero-cue-line {
+    height: 30px;
   }
 }
 
 /* ---- 减少动态效果 ---- */
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   #cursor {
     animation: none;
     opacity: 1;
   }
+
   #loading span {
     animation: none;
   }
-  #realwall-overlay {
+
+  .split-line > span,
+  .feature-media-frame img,
+  .dossier .split-line > span,
+  .dossier-lead,
+  .dossier-stats,
+  .dossier-plan,
+  .dossier-ledger {
+    transition: opacity 0.4s linear;
+    transform: none;
+    filter: none;
+    translate: none;
+  }
+
+  /* 首幕文字不做滚动退场：保留内容可读性，由第二幕正常覆盖 */
+  #text-panel > * {
+    translate: none;
+    opacity: 1;
+  }
+
+  .hero-cue {
+    translate: none;
+    opacity: 1;
+  }
+
+  .feature-rule {
+    transition: none;
+    transform: none;
+  }
+
+  /* 幕间羽化带保留颜色，去掉呼吸动画 */
+  .feature-dawn::after {
+    animation: none;
+    opacity: 0.48;
+    transform: none;
+  }
+
+  .feature-cta::after,
+  .feature-cta-arrow,
+  .dossier-cta::after,
+  .dossier-cta-arrow,
+  .hero-cue-line,
+  .cmp-handle-grip {
     transition: none;
   }
 }

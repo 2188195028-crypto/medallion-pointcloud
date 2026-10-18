@@ -1,18 +1,25 @@
 /* ============================================================
-   shot-realwall.js — 落地实景「擦除对比」全流程验证
-   桌面 1600×900:默认视图 → 两个入口开门进度 → 滚轮擦除/钳位 →
-                   键盘擦除 → 三档进度截图 → Esc/背景关闭 → 两图加载
-   手机 390×844 竖屏(触屏):点开 → 竖向拖动映射横向擦除 → 钳位
-   输出:shots/realwall-*.png;失败时 exit 1(全绿才是绿)
-   用法:先起服务器 python tools/serve_debug.py 8137,再 node tools/shot-realwall.js
-   作者:Ligong-Wenchang  日期:2026-09-01(v1.8 擦除对比改造)
+   shot-realwall.js — 「落地实景」滚动流全流程验证
+   页面结构（v2.1）：首幕点云 → 纸面编辑式分栏 → 青瓷项目档案 → 同机位对比
+   桌面 1600×900：
+     首幕成形 → 首屏提示指向第二幕 → 滚轮下滚（首幕文字退场）→ 粒子消散 →
+     分栏揭示终态 → CTA 进入项目档案 → 档案揭示终态 → CTA 进入第四幕 →
+     滑杆初始 50% → 指针拖动 → 键盘 ← / End / Home → 回顶文字复位/粒子回升
+   手机 390×844（触屏）：
+     无横向溢出 / 首幕满屏 / 提示条 ≥44px → 触摸滑动翻页（CDP 真实触摸）→
+     分栏揭示 → 项目档案单栏堆叠 → 触摸拖动手柄 → ARIA 与端点状态
+   输出：shots/realwall-*.png；失败时 exit 1（全绿才是绿）
+   用法：先起服务器 python tools/serve_debug.py 8137，再 node tools/shot-realwall.js
+        （发布前 tag 未推出时加 RW_LOCAL=1）
+   作者：Ligong-Wenchang  日期：2026-09-05（v1.8 擦除舞台）
+     v2.1 滚动流改版：移除 overlay 章节，改为四幕滚动链路 + 触摸滑动/拖动手柄
    ============================================================ */
 const { chromium } = require("playwright-core");
 const path = require("path");
 const fs = require("fs");
 
-// ?nowatchdog=1:发布前 jsDelivr 对不存在 tag 可能挂起把加载拖过 45s,
-// 撞上看门狗会弹 error 面板遮屏拦点击 —— 测试场景跳过看门狗
+// ?nowatchdog=1：发布前 jsDelivr 对不存在 tag 可能挂起把加载拖过 45s，
+// 撞上看门狗会弹 error 面板遮屏拦交互 —— 测试场景跳过看门狗
 const BASE = "http://127.0.0.1:8137/?nowatchdog=1";
 const SHOTS = path.join(__dirname, "..", "shots");
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -24,12 +31,11 @@ function check(name, pass, detail) {
   console.log(`${pass ? "PASS" : "FAIL"}  ${name}${detail ? "  (" + detail + ")" : ""}`);
 }
 
-// ---- 本地开发模式(RW_LOCAL=1) ----
-// 起因:index.html 的 importmap 把 three 指向 CDN 的版本 tag,而开发中新 tag 尚未
-// 推送 → three 404。showcase.js/config/图片 都有本地回退,唯独 importmap 没有
-// (importmap 无法表达回退),于是整页起不来。改动生产代码去迁就测试是本末倒置,
-// 所以把兜底放在测试侧:拦截 CDN,用工作区文件应答。
-// 不设本变量时走真实链路(CDN 404 → 本地回退),发布后验证用默认模式。
+// ---- 本地开发模式（RW_LOCAL=1） ----
+// 起因：index.html 的 importmap 把 three 指向 CDN 的版本 tag，而开发中新 tag 尚未
+// 推送 → three 404。showcase.js/config/图片 都有本地回退，唯独 importmap 没有
+// （importmap 无法表达回退），于是整页起不来。兜底放在测试侧：拦截 CDN，
+// 用工作区文件应答。不设本变量时走真实链路。
 const LOCAL = process.env.RW_LOCAL === "1";
 const MIME = {
   ".js": "text/javascript",
@@ -44,8 +50,7 @@ const MIME = {
 
 async function installLocalCdn(ctx) {
   if (!LOCAL) return;
-  // 通配 *.jsdelivr.net:三个 three 模块走 cdn.jsdelivr.net,而 bin/图片走
-  // gcore.jsdelivr.net(config.cdnBase,见 showcase-config.js 里的理由),两个 host 都要拦
+  // 通配 *.jsdelivr.net：three 模块走 cdn.jsdelivr.net，bin/图片走 gcore.jsdelivr.net
   await ctx.route("**/*.jsdelivr.net/**", async (route) => {
     const m = route.request().url().match(/medallion-pointcloud@[^/]+\/(.+)$/);
     if (!m) return route.continue();
@@ -58,7 +63,7 @@ async function installLocalCdn(ctx) {
       body: fs.readFileSync(file),
     });
   });
-  console.log(`(本地模式:CDN 请求由工作区文件应答)`);
+  console.log("(本地模式：CDN 请求由工作区文件应答)");
 }
 
 async function waitForReady(page) {
@@ -70,27 +75,63 @@ async function waitForReady(page) {
     null,
     { timeout: 180000 }
   );
-  await page.waitForTimeout(2000);
+  await page.waitForFunction(
+    () => document.getElementById("body").textContent.length >= 103,
+    null,
+    { timeout: 60000 }
+  );
+  await page.waitForTimeout(2200); // 入场淡入 + 粒子成形完成
 }
 
-// 擦除进度由 showcase.js 写在 #realwall-overlay 的 dataset 上
-const readWipe = (page) =>
-  page.evaluate(() =>
-    parseFloat(document.getElementById("realwall-overlay").dataset.wipe ?? "NaN")
-  );
+async function waitPhase(page, pred, ms = 45000) {
+  try {
+    await page.waitForFunction(pred, null, { timeout: ms });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-// 断言 CSS 真的生效(不只看 JS 状态):after 图层必须带上 mask 渐变
-const readMaskApplied = (page) =>
-  page.evaluate(() => {
-    const el = document.getElementById("realwall-after");
-    if (!el) return "";
-    const cs = getComputedStyle(el);
-    return cs.maskImage || cs.webkitMaskImage || "";
-  });
+// 揭示终态：行 blur0 / y0 / opacity1，图 scale1 / y0 / opacity1
+async function waitFeatureSettled(page) {
+  await page.waitForFunction(
+    () => {
+      const line = document.querySelector(".split-line > span");
+      const img = document.getElementById("feature-img");
+      if (!line || !img) return false;
+      const l = getComputedStyle(line);
+      const i = getComputedStyle(img);
+      const lm = new DOMMatrixReadOnly(l.transform === "none" ? "" : l.transform);
+      const im = new DOMMatrixReadOnly(i.transform === "none" ? "" : i.transform);
+      return (
+        parseFloat(l.opacity) > 0.999 &&
+        (l.filter === "blur(0px)" || l.filter === "none") &&
+        Math.abs(lm.f) < 0.05 &&
+        parseFloat(i.opacity) > 0.999 &&
+        Math.abs(im.a - 1) < 1e-4 &&
+        Math.abs(im.f) < 0.05
+      );
+    },
+    null,
+    { timeout: 15000 }
+  );
+}
+
+async function waitCompareImages(page) {
+  await page.waitForFunction(
+    () => {
+      const b = document.getElementById("cmp-before");
+      const a = document.getElementById("cmp-after");
+      return b && a && b.complete && b.naturalWidth > 0 && a.complete && a.naturalWidth > 0;
+    },
+    null,
+    { timeout: 30000 }
+  );
+}
 
 async function main() {
   const browser = await chromium.launch({
-    channel: "msedge", // chromium-1223 缓存已失效,改用系统 Edge(与作品集 tools/shot.mjs 同法)
+    channel: "msedge", // chromium-1223 缓存已失效，改用系统 Edge（与作品集 tools/shot.mjs 同法）
     headless: true,
     args: ["--disable-gpu", "--no-sandbox"],
   });
@@ -105,170 +146,251 @@ async function main() {
 
     await page.goto(BASE, { timeout: 180000 });
     await waitForReady(page);
-    await page.screenshot({ path: path.join(SHOTS, "realwall-desktop-default.png") });
+    await page.screenshot({ path: path.join(SHOTS, "realwall-desktop-hero.png") });
 
-    const thumbCount = await page.locator(".realwall-thumb").count();
-    check("缩略图 2 张", thumbCount === 2, `count=${thumbCount}`);
-
-    // --- 入口 1:「改造前」→ wipe 应为 0 ---
-    await page.locator(".realwall-thumb").first().click();
-    await page.waitForTimeout(600);
-    const openAfterClick = await page.evaluate(
-      () => !document.getElementById("realwall-overlay").hidden
-    );
-    check("点缩略图打开 overlay", openAfterClick);
-    const wipeBefore = await readWipe(page);
-    check("「改造前」入口开门进度 = 0", Math.abs(wipeBefore) < 0.001, `wipe=${wipeBefore}`);
-    const mask = await readMaskApplied(page);
-    check("after 图层 mask 渐变已生效", mask.includes("gradient"), mask.slice(0, 60));
-    const captionStart = await page.evaluate(
-      () => document.getElementById("realwall-caption").textContent
-    );
-    check("进度 0 时图注为「改造前」", captionStart.includes("改造前"), captionStart);
-    await page.screenshot({ path: path.join(SHOTS, "realwall-wipe-000.png") });
-
-    // --- 守卫:擦除期间的滚轮不得驱动粒子消散 ---
-    // 读 flow.phase(1=成形/0=散开)。先等成形跑完再取基准,否则分不清"还没升起来"
-    // 与"被滚散了"。断言必须成对:下面 wipe 推进证明滚轮确实送达并被擦除消费,
-    // phase 不变才说明全局消散监听被 realwallIsOpen() 挡住——只测 phase 会在
-    // "滚轮压根没送达"时假绿(两次监听抢事件是这个项目高风险点,见 CLAUDE.md)。
-    await page.waitForFunction(() => window.__flow && window.__flow.phase >= 0.999, null, {
-      timeout: 30000,
-    });
-    const phaseBefore = await page.evaluate(() => window.__flow.phase);
-
-    // --- 滚轮擦除:下滚前进、上滚后退、两端钳位 ---
-    await page.mouse.move(800, 450);
-    await page.mouse.wheel(0, 400);
-    await page.waitForTimeout(200);
-    const wipeAfterWheel = await readWipe(page);
-    check("滚轮下滚推进擦除", wipeAfterWheel > wipeBefore, `wipe=${wipeAfterWheel}`);
-
-    await page.mouse.wheel(0, -4000); // 远远超过回到 0 所需
-    await page.waitForTimeout(200);
-    const wipeClampLow = await readWipe(page);
-    check("上滚钳位到 0 不越界", wipeClampLow === 0, `wipe=${wipeClampLow}`);
-
-    await page.mouse.wheel(0, 40000); // 远远超过满进度所需
-    await page.waitForTimeout(200);
-    const wipeClampHigh = await readWipe(page);
-    check("下滚钳位到 1 不越界", wipeClampHigh === 1, `wipe=${wipeClampHigh}`);
-    await page.screenshot({ path: path.join(SHOTS, "realwall-wipe-100.png") });
-
-    // 累计 44400 的滚轮量已远超消散阈值(80),phase 若还是 1 就是守卫真的在挡
-    const phaseAfter = await page.evaluate(() => window.__flow.phase);
-    check(
-      "擦除期间滚轮未驱动粒子消散(守卫)",
-      phaseAfter >= 0.999,
-      `phase=${phaseBefore.toFixed(3)}→${phaseAfter.toFixed(3)}, wipe 同期由 0 → ${wipeClampHigh}`
-    );
-
-    // --- 键盘擦除:回到 0 再用 → 走到中段 ---
-    await page.mouse.wheel(0, -40000);
-    await page.waitForTimeout(150);
-    for (let i = 0; i < 6; i++) await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(250);
-    const wipeMid = await readWipe(page);
-    check("方向键推进擦除(6 步 ≈ 0.48)", wipeMid > 0.3 && wipeMid < 0.7, `wipe=${wipeMid}`);
-    await page.screenshot({ path: path.join(SHOTS, "realwall-wipe-050.png") });
-
-    // --- Esc 关闭 ---
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(400);
-    check(
-      "Esc 关闭",
-      await page.evaluate(() => document.getElementById("realwall-overlay").hidden)
-    );
-
-    // --- 入口 2:「落地后」→ wipe 应为 1 ---
-    await page.locator(".realwall-thumb").nth(1).click();
-    await page.waitForTimeout(500);
-    const wipeAfterEntry = await readWipe(page);
-    check("「落地后」入口开门进度 = 1", wipeAfterEntry === 1, `wipe=${wipeAfterEntry}`);
-    const captionEnd = await page.evaluate(
-      () => document.getElementById("realwall-caption").textContent
-    );
-    check("进度 1 时图注为「落地后」", captionEnd.includes("落地后"), captionEnd);
-
-    // --- 背景点击关闭(无拖动,应为正常点击) ---
-    await page.mouse.click(40, 450); // 左边缘背景
-    await page.waitForTimeout(400);
-    check(
-      "点背景关闭",
-      await page.evaluate(() => document.getElementById("realwall-overlay").hidden)
-    );
-
-    // --- 两图加载成功(naturalWidth>0;CDN 404 → 本地回退需 ~1-3s,条件等待) ---
-    await page.locator(".realwall-thumb").first().click();
-    await page.waitForTimeout(600);
-    let bothLoaded = true;
-    try {
-      await page.waitForFunction(
-        () =>
-          ["realwall-before", "realwall-after"].every(
-            (id) => document.getElementById(id).naturalWidth > 0
-          ),
-        null,
-        { timeout: 20000 }
-      );
-    } catch {
-      bothLoaded = false;
-    }
-    check("before/after 两图加载成功", bothLoaded);
-
-    // --- 对齐补偿是否真的注入了(值来自 config,写错会静默错位) ---
-    const alignVars = await page.evaluate(() => {
-      const cs = getComputedStyle(document.getElementById("realwall-overlay"));
+    // --- 首幕：成形、提示条指向第二幕、第二幕未提前揭示 ---
+    const initial = await page.evaluate(() => {
+      const cue = document.getElementById("hero-cue").getBoundingClientRect();
       return {
-        scale: cs.getPropertyValue("--rw-scale").trim(),
-        offsetY: cs.getPropertyValue("--rw-offset-y").trim(),
-        feather: cs.getPropertyValue("--rw-feather").trim(),
+        phase: window.__flow.phase,
+        heroInView: window.__page.heroInView,
+        revealed: window.__page.featureRevealed,
+        cueHref: document.getElementById("hero-cue").getAttribute("href"),
+        cue: { w: cue.width, h: cue.height, top: cue.top, bottom: cue.bottom },
+        viewport: [innerWidth, innerHeight],
+        scrollY: window.scrollY,
+      };
+    });
+    check("首幕粒子已成形", initial.phase >= 0.999, `phase=${initial.phase}`);
+    check("首屏提示指向 #feature", initial.cueHref === "#feature", initial.cueHref);
+    check(
+      "首屏提示在视口内且 ≥44px",
+      initial.cue.top >= 0 &&
+        initial.cue.bottom <= initial.viewport[1] &&
+        initial.cue.w >= 43.5 &&
+        initial.cue.h >= 43.5,
+      JSON.stringify(initial.cue)
+    );
+    check("第二幕未提前揭示", initial.revealed === false);
+
+    // --- 滚轮下滚：页面滚动 + 粒子消散 + 第二幕揭示 ---
+    await page.mouse.move(800, 450);
+    await page.mouse.wheel(0, 900);
+    const scrolled = await page.waitForFunction(
+      () => window.scrollY > innerHeight * 0.5,
+      null,
+      { timeout: 10000 }
+    ).then(() => true).catch(() => false);
+    check("滚轮下滚翻过首幕", scrolled);
+
+    // 首幕文字随滚动退场（v2.1 浅色轮新增）：--hero-exit 到 1，标题淡出、提示条收线。
+    // 注意：updateText 的入场内联 opacity 要等下一帧才乘上退场因子，提示条还有 0.3s
+    // 过渡——不能滚动后立刻读，等状态落定再采集。
+    await page.waitForFunction(
+      () => {
+        const title = getComputedStyle(document.getElementById("title"));
+        const cue = getComputedStyle(document.getElementById("hero-cue"));
+        return parseFloat(title.opacity) < 0.1 && parseFloat(cue.opacity) < 0.1;
+      },
+      null,
+      { timeout: 6000 }
+    ).catch(() => {});
+    const heroExit = await page.evaluate(() => ({
+      exit: window.__page.heroExit,
+      titleOpacity: parseFloat(getComputedStyle(document.getElementById("title")).opacity),
+      titleTranslate: getComputedStyle(document.getElementById("title")).translate,
+      cueOpacity: parseFloat(getComputedStyle(document.getElementById("hero-cue")).opacity),
+    }));
+    check(
+      "首幕文字随下滚退场",
+      heroExit.exit >= 0.99 && heroExit.titleOpacity < 0.1 && heroExit.cueOpacity < 0.1,
+      JSON.stringify(heroExit)
+    );
+
+    const dissolved = await waitPhase(page, () => window.__flow && window.__flow.phase <= 0.02);
+    check("下滚后粒子完成消散", dissolved, await page.evaluate(() => String(window.__flow.phase)));
+    const revealed = await page.waitForFunction(
+      () => window.__page.featureRevealed === true,
+      null,
+      { timeout: 10000 }
+    ).then(() => true).catch(() => false);
+    check("第二幕已被揭示", revealed);
+    await waitFeatureSettled(page);
+    const feature = await page.evaluate(() => {
+      const img = document.getElementById("feature-img");
+      const line = document.querySelector(".split-line > span");
+      const l = getComputedStyle(line);
+      return {
+        imgLoaded: img.complete && img.naturalWidth > 0,
+        title: document.getElementById("feature-title").innerText,
+        cta: document.getElementById("feature-cta-label").textContent,
+        blur: l.filter,
+        opacity: l.opacity,
+      };
+    });
+    check("分栏实景图已加载", feature.imgLoaded);
+    check("分栏终态 blur 归零", feature.blur === "blur(0px)" || feature.blur === "none", feature.blur);
+    check("分栏终态不透明", Math.abs(parseFloat(feature.opacity) - 1) < 0.001, feature.opacity);
+    check("分栏标题为两行文案", feature.title.includes("九万颗粒子"), feature.title);
+    await page.screenshot({ path: path.join(SHOTS, "realwall-desktop-feature.png") });
+
+    // --- 分栏 CTA 进入第三幕 · 项目档案（锚点跳转） ---
+    const dossierTop = await page.evaluate(() => {
+      const el = document.getElementById("dossier");
+      return el.getBoundingClientRect().top + window.scrollY;
+    });
+    await page.click("#feature-cta");
+    const jumpedDossier = await page.waitForFunction(
+      (top) => Math.abs(window.scrollY - top) < 4,
+      dossierTop,
+      { timeout: 12000 }
+    ).then(() => true).catch(() => false);
+    check(
+      "分栏 CTA 跳转到项目档案",
+      jumpedDossier,
+      `scrollY=${await page.evaluate(() => window.scrollY)} top=${dossierTop.toFixed(1)}`
+    );
+    const dossierRevealed = await page.waitForFunction(
+      () => window.__page.dossierRevealed === true,
+      null,
+      { timeout: 10000 }
+    ).then(() => true).catch(() => false);
+    check("项目档案已揭示", dossierRevealed);
+    await page.waitForTimeout(900); // 标题行 blur/y 与双栏过渡落定
+    const dossier = await page.evaluate(() => {
+      const el = document.getElementById("dossier");
+      const span = el.querySelector("#dossier-title .split-line > span");
+      const cs = getComputedStyle(span);
+      return {
+        title: document.getElementById("dossier-title").innerText,
+        stats: [...el.querySelectorAll("#dossier-stats > div")].map((row) =>
+          ((row.querySelector("dd") || {}).textContent || "").replace(/\s+/g, "")
+        ),
+        steps: el.querySelectorAll("#dossier-steps > li").length,
+        materials: el.querySelectorAll("#dossier-materials > div").length,
+        cta: document.getElementById("dossier-cta-label").textContent,
+        ctaHref: document.getElementById("dossier-cta").getAttribute("href"),
+        blur: cs.filter,
+        opacity: cs.opacity,
+        docW: document.documentElement.scrollWidth,
+        vw: innerWidth,
       };
     });
     check(
-      "对齐补偿变量已注入",
-      alignVars.scale === "101.500%" &&
-        alignVars.offsetY === "0.6969%" && // 8/1148×100 = 0.69686… 四位小数
-        alignVars.feather === "6.000%",
-      JSON.stringify(alignVars)
+      "档案标题为两行文案",
+      dossier.title.includes("一面墙") && dossier.title.includes("前期与施工"),
+      dossier.title
+    );
+    check("档案前期规划 5 步", dossier.steps === 5, String(dossier.steps));
+    check("档案材料工序 6 行", dossier.materials === 6, String(dossier.materials));
+    check(
+      "档案项目数字 2m / 7天 / 4人",
+      dossier.stats.length === 3 && dossier.stats.join("/") === "2m/7天/4人",
+      JSON.stringify(dossier.stats)
+    );
+    check("档案终态 blur 归零", dossier.blur === "blur(0px)" || dossier.blur === "none", dossier.blur);
+    check("档案终态不透明", Math.abs(parseFloat(dossier.opacity) - 1) < 0.001, dossier.opacity);
+    check("档案 CTA 指向对比", /#compare$/.test(dossier.ctaHref || ""), dossier.ctaHref);
+    check("档案无横向溢出", dossier.docW <= dossier.vw + 1, `${dossier.docW}/${dossier.vw}`);
+    await page.screenshot({ path: path.join(SHOTS, "realwall-desktop-dossier.png") });
+
+    // --- 档案 CTA 进入第四幕（锚点跳转） ---
+    const compareTop = await page.evaluate(() => {
+      const el = document.getElementById("compare");
+      return el.getBoundingClientRect().top + window.scrollY;
+    });
+    await page.click("#dossier-cta");
+    const jumped = await page.waitForFunction(
+      (top) => Math.abs(window.scrollY - top) < 4,
+      compareTop,
+      { timeout: 12000 }
+    ).then(() => true).catch(() => false);
+    check("档案 CTA 跳转到第四幕", jumped, `scrollY=${await page.evaluate(() => window.scrollY)} top=${compareTop.toFixed(1)}`);
+    await waitCompareImages(page);
+    await page.waitForTimeout(300);
+    const cmp0 = await page.evaluate(() => ({
+      pos: window.__page.comparePos,
+      handleW: document.getElementById("cmp-handle").getBoundingClientRect().width,
+      handleH: document.getElementById("cmp-handle").getBoundingClientRect().height,
+      aria: document.getElementById("cmp-handle").getAttribute("aria-valuetext"),
+      mask: (() => {
+        const cs = getComputedStyle(document.querySelector(".cmp-after-layer"));
+        return cs.maskImage || cs.webkitMaskImage || "";
+      })(),
+    }));
+    check("第三幕初始 50%", Math.abs(cmp0.pos - 0.5) < 0.001, String(cmp0.pos));
+    check("手柄触控尺寸 ≥44", cmp0.handleW >= 43.5 && cmp0.handleH >= 43.5, `${cmp0.handleW}×${cmp0.handleH}`);
+    check("滑杆初始读屏文案", /改造前 50%/.test(cmp0.aria), cmp0.aria);
+    check("after 线性 mask 生效", /linear-gradient/.test(cmp0.mask) && /to right/.test(cmp0.mask), cmp0.mask.slice(0, 60));
+    await page.screenshot({ path: path.join(SHOTS, "realwall-desktop-compare.png") });
+
+    // --- 指针拖动分隔线到 30% ---
+    const box = await page.locator("#cmp-frame").boundingBox();
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    const dragged = await page.evaluate(() => window.__page.comparePos);
+    check("指针拖动分隔线到 30%", Math.abs(dragged - 0.3) < 0.02, String(dragged));
+    check("拖动后输入方式为指针", await page.evaluate(() => document.getElementById("cmp-frame").dataset.input) === "pointer");
+
+    // --- 键盘：← 2% / End / Home ---
+    await page.focus("#cmp-handle");
+    await page.keyboard.press("ArrowLeft");
+    await page.waitForTimeout(120);
+    check(
+      "键盘左移 2%",
+      Math.abs((await page.evaluate(() => window.__page.comparePos)) - 0.28) < 0.001,
+      String(await page.evaluate(() => window.__page.comparePos))
     );
 
-    // --- 对照组:关掉 overlay 后,同一批滚轮动作必须能驱动粒子消散/回升 ---
-    // 上面那条守护断言要有意义,前提是"phase 确实会随滚轮变化"。没有这组对照,
-    // phase 哪怕永远卡在 1(钩子失效/粒子根本没起来),守护断言也会假绿。
-    // 顺带补上一直没人自动跑的交互主路径(滚轮消散 → 反向回升)。
-    // 注意**不能按秒断言**:帧循环 dt 上限 0.1s,headless 软件渲染(禁用 GPU)
-    // 帧率 <10fps 时缓动会明显慢于标称速度(实测 2.6s 只走完 0.8)——那是测试环境
-    // 的产物,不是产品缺陷(真机 30fps+ 时 dt 不触顶)。所以一律等状态到位。
-    async function waitPhase(pred, ms) {
-      try {
-        await page.waitForFunction(pred, null, { timeout: ms });
-        return true;
-      } catch {
-        return false;
-      }
-    }
+    await page.keyboard.press("End");
+    await page.waitForTimeout(300);
+    const end = await page.evaluate(() => {
+      const handle = document.getElementById("cmp-handle");
+      return {
+        pos: window.__page.comparePos,
+        edge: document.getElementById("cmp-frame").dataset.edge,
+        opacity: getComputedStyle(handle).opacity,
+        afterHidden: document.getElementById("cmp-after").getAttribute("aria-hidden"),
+        aria: handle.getAttribute("aria-valuetext"),
+      };
+    });
+    check("End 到 100%", Math.abs(end.pos - 1) < 0.001, String(end.pos));
+    check("键盘端点手柄保留（不淡出）", end.opacity === "1", end.opacity);
+    check("100% 时 after 对读屏隐藏", end.afterHidden === "true", String(end.afterHidden));
+    check("100% 读屏比例", /改造前 100%，落地后 0%/.test(end.aria), end.aria);
+    await page.screenshot({ path: path.join(SHOTS, "realwall-desktop-cmp-100.png") });
 
-    await page.keyboard.press("Escape");
-    await page.waitForTimeout(400);
-    const phaseCtlStart = await page.evaluate(() => window.__flow.phase);
-    await page.mouse.move(400, 450);
-    await page.mouse.wheel(0, 300); // 阈值 80,累计 300 必触发消散
-    const dissolved = await waitPhase(() => window.__flow.phase < 0.05, 30000);
-    const phaseDissolved = await page.evaluate(() => window.__flow.phase);
+    await page.keyboard.press("Home");
+    await page.waitForTimeout(300);
+    const home = await page.evaluate(() => ({
+      pos: window.__page.comparePos,
+      edge: document.getElementById("cmp-frame").dataset.edge,
+      beforeHidden: document.getElementById("cmp-before").getAttribute("aria-hidden"),
+      aria: document.getElementById("cmp-handle").getAttribute("aria-valuetext"),
+    }));
+    check("Home 到 0%", Math.abs(home.pos) < 0.001, String(home.pos));
+    check("0% 时 before 对读屏隐藏", home.beforeHidden === "true", String(home.beforeHidden));
+    check("0% 读屏比例", /改造前 0%，落地后 100%/.test(home.aria), home.aria);
+
+    // --- 回顶：粒子回升成形 ---
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    const reformed = await waitPhase(page, () => window.__flow && window.__flow.phase >= 0.999);
+    check("回顶后粒子回升成形", reformed, await page.evaluate(() => String(window.__flow.phase)));
+    check("回顶后首幕重新进入视口", await page.evaluate(() => window.__page.heroInView === true));
+    const heroBack = await page.evaluate(() => ({
+      exit: window.__page.heroExit,
+      titleOpacity: parseFloat(getComputedStyle(document.getElementById("title")).opacity),
+    }));
     check(
-      "对照组:overlay 关闭时滚轮触发消散",
-      dissolved && phaseDissolved < 0.05,
-      `phase=${phaseCtlStart.toFixed(3)}→${phaseDissolved.toFixed(3)}`
+      "回顶后首幕文字复位",
+      heroBack.exit <= 0.001 && heroBack.titleOpacity > 0.99,
+      JSON.stringify(heroBack)
     );
-    await page.mouse.wheel(0, -300);
-    const risen = await waitPhase(() => window.__flow.phase >= 0.999, 30000);
-    const phaseRisen = await page.evaluate(() => window.__flow.phase);
-    check(
-      "对照组:反向滚轮回升成形",
-      risen && phaseRisen >= 0.999,
-      `phase=${phaseDissolved.toFixed(3)}→${phaseRisen.toFixed(3)}`
-    );
+    await page.screenshot({ path: path.join(SHOTS, "realwall-desktop-reformed.png") });
+
     await ctx.close();
   }
 
@@ -287,69 +409,173 @@ async function main() {
 
     await page.goto(BASE, { timeout: 180000 });
     await waitForReady(page);
-    await page.screenshot({ path: path.join(SHOTS, "realwall-mobile-default.png") });
+    await page.screenshot({ path: path.join(SHOTS, "realwall-mobile-hero.png") });
 
-    await page.locator(".realwall-thumb").first().tap();
-    await page.waitForTimeout(800);
-    check(
-      "手机点开 overlay",
-      await page.evaluate(() => !document.getElementById("realwall-overlay").hidden)
-    );
-    const wipeMobileStart = await readWipe(page);
-    check("手机「改造前」入口进度 = 0", Math.abs(wipeMobileStart) < 0.001, `wipe=${wipeMobileStart}`);
-
-    // 手机守卫基准(同桌面:等成形完成,再确认滑动不驱动粒子)
-    await page.waitForFunction(() => window.__flow && window.__flow.phase >= 0.999, null, {
-      timeout: 30000,
+    const layout = await page.evaluate(() => {
+      const cue = document.getElementById("hero-cue").getBoundingClientRect();
+      return {
+        vw: innerWidth,
+        vh: innerHeight,
+        docW: document.documentElement.scrollWidth,
+        heroH: document.getElementById("hero").getBoundingClientRect().height,
+        cue: { w: cue.width, h: cue.height, top: cue.top, bottom: cue.bottom },
+        phase: window.__flow.phase,
+      };
     });
-    const phaseMobileBefore = await page.evaluate(() => window.__flow.phase);
+    check("手机无横向溢出", layout.docW <= layout.vw + 1, `${layout.docW}/${layout.vw}`);
+    check("手机首幕满屏", Math.abs(layout.heroH - layout.vh) <= 2, `${layout.heroH}/${layout.vh}`);
+    check(
+      "手机提示条在视口内且 ≥44px",
+      layout.cue.top >= 0 && layout.cue.bottom <= layout.vh &&
+        layout.cue.w >= 43.5 && layout.cue.h >= 43.5,
+      JSON.stringify(layout.cue)
+    );
+    check("手机首幕粒子已成形", layout.phase >= 0.999, String(layout.phase));
 
-    // 竖向拖动 → 横向擦除(CDP 派发真实触摸事件;竖直上滑半屏 ≈ 进度 +0.5)
+    // --- 触摸上滑翻页（CDP 逐帧 dispatchTouchEvent，验证没有被 touch-action 锁住） ---
+    // 注意：Input.synthesizeScrollGesture 在 headless Edge + isMobile 下是空操作（实测 scrollY 恒为 0），
+    // 必须用真实的 touchStart/touchMove/touchEnd 序列才会触发原生滚动。
     const cdp = await ctx.newCDPSession(page);
+    let gestureOk = true;
+    try {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: 195, y: 700, id: 1 }],
+      });
+      for (let i = 1; i <= 12; i++) {
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ x: 195, y: 700 - (620 * i) / 12, id: 1 }],
+        });
+        await page.waitForTimeout(25);
+      }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    } catch (e) {
+      gestureOk = false;
+      logs.push(`[mobile][warn] dispatchTouchEvent 失败: ${e.message}`);
+    }
+    await page.waitForTimeout(900);
+    const afterSwipe = await page.evaluate(() => window.scrollY);
+    check("触摸上滑翻过首幕", gestureOk && afterSwipe > layout.vh * 0.5, `scrollY=${afterSwipe}`);
+    const mobileDissolved = await waitPhase(page, () => window.__flow && window.__flow.phase <= 0.02);
+    check("手机上滑后粒子消散", mobileDissolved);
+    const mobileRevealed = await page.waitForFunction(
+      () => window.__page.featureRevealed === true,
+      null,
+      { timeout: 10000 }
+    ).then(() => true).catch(() => false);
+    check("手机第二幕已揭示", mobileRevealed);
+    await waitFeatureSettled(page);
+    await page.screenshot({ path: path.join(SHOTS, "realwall-mobile-feature.png") });
+
+    // --- 项目档案：单栏堆叠 + 内容完整 ---
+    await page.evaluate(() => {
+      const el = document.getElementById("dossier");
+      window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY + 8, behavior: "instant" });
+    });
+    const mobileDossierRevealed = await page.waitForFunction(
+      () => window.__page.dossierRevealed === true,
+      null,
+      { timeout: 10000 }
+    ).then(() => true).catch(() => false);
+    check("手机项目档案已揭示", mobileDossierRevealed);
+    await page.waitForTimeout(900);
+    const mobileDossier = await page.evaluate(() => {
+      const el = document.getElementById("dossier");
+      const plan = el.querySelector(".dossier-plan").getBoundingClientRect();
+      const ledger = el.querySelector(".dossier-ledger").getBoundingClientRect();
+      return {
+        stats: el.querySelectorAll("#dossier-stats > div").length,
+        steps: el.querySelectorAll("#dossier-steps > li").length,
+        materials: el.querySelectorAll("#dossier-materials > div").length,
+        stacked: ledger.top > plan.top + 40,
+        docW: document.documentElement.scrollWidth,
+        vw: innerWidth,
+      };
+    });
+    check(
+      "手机档案 5 步 / 6 行 / 3 项数字",
+      mobileDossier.steps === 5 && mobileDossier.materials === 6 && mobileDossier.stats === 3,
+      `${mobileDossier.steps}/${mobileDossier.materials}/${mobileDossier.stats}`
+    );
+    check("手机档案单栏堆叠", mobileDossier.stacked, `stacked=${mobileDossier.stacked}`);
+    check("手机档案无横向溢出", mobileDossier.docW <= mobileDossier.vw + 1, `${mobileDossier.docW}/${mobileDossier.vw}`);
+    await page.screenshot({ path: path.join(SHOTS, "realwall-mobile-dossier.png") });
+
+    // --- 滚到对比幕（画框居中），触摸拖动手柄 ---
+    await page.evaluate(() => {
+      const b = document.getElementById("cmp-frame").getBoundingClientRect();
+      window.scrollTo({
+        top: window.scrollY + b.top + b.height / 2 - innerHeight / 2,
+        behavior: "instant",
+      });
+    });
+    await waitCompareImages(page);
+    await page.waitForTimeout(300);
+    const frameBox = await page.locator("#cmp-frame").boundingBox();
+    const startX = frameBox.x + frameBox.width * 0.5;
+    const startY = frameBox.y + frameBox.height * 0.5;
+    const endX = frameBox.x + frameBox.width * 0.3;
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
-      touchPoints: [{ x: 195, y: 620 }],
+      touchPoints: [{ x: startX, y: startY, id: 1 }],
     });
-    for (let i = 1; i <= 8; i++) {
+    for (let i = 1; i <= 6; i++) {
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchMove",
-        touchPoints: [{ x: 195, y: 620 - i * 26 }],
+        touchPoints: [{ x: startX + ((endX - startX) * i) / 6, y: startY, id: 1 }],
       });
       await page.waitForTimeout(30);
     }
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await page.waitForTimeout(300);
-    const wipeMobileDrag = await readWipe(page);
-    check(
-      "手机上滑推进擦除",
-      wipeMobileDrag > 0.3 && wipeMobileDrag < 0.7,
-      `wipe=${wipeMobileDrag}`
-    );
-    await page.screenshot({ path: path.join(SHOTS, "realwall-mobile-wipe.png") });
+    await page.waitForTimeout(250);
+    const touchPos = await page.evaluate(() => ({
+      pos: window.__page.comparePos,
+      edge: document.getElementById("cmp-frame").dataset.edge || null,
+      input: document.getElementById("cmp-frame").dataset.input,
+      handleOpacity: getComputedStyle(document.getElementById("cmp-handle")).opacity,
+    }));
+    check("手机触摸拖动手柄到 30%", Math.abs(touchPos.pos - 0.3) < 0.05, JSON.stringify(touchPos));
+    check("手机拖动后手柄可见", touchPos.handleOpacity === "1" && touchPos.edge === null, JSON.stringify(touchPos));
+    await page.screenshot({ path: path.join(SHOTS, "realwall-mobile-compare.png") });
 
-    // 拖完不该被当成"点背景"误关闭(拖动位移远超阈值)
+    // 触摸拖过右缘 → 端点淡出
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: frameBox.x + frameBox.width * 0.3, y: startY, id: 2 }],
+    });
+    for (let i = 1; i <= 5; i++) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: endX + ((frameBox.x + frameBox.width + 30 - endX) * i) / 5, y: startY, id: 2 }],
+      });
+      await page.waitForTimeout(30);
+    }
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForTimeout(350);
+    const touchEnd = await page.evaluate(() => ({
+      pos: window.__page.comparePos,
+      edge: document.getElementById("cmp-frame").dataset.edge,
+      input: document.getElementById("cmp-frame").dataset.input,
+      opacity: getComputedStyle(document.getElementById("cmp-handle")).opacity,
+    }));
+    check("手机拖过右缘钳位 100%", Math.abs(touchEnd.pos - 1) < 0.001, String(touchEnd.pos));
     check(
-      "拖动后 overlay 仍打开(未误触关闭)",
-      await page.evaluate(() => !document.getElementById("realwall-overlay").hidden)
+      "手机指针端点手柄淡出",
+      touchEnd.edge === "end" && touchEnd.input === "pointer" && touchEnd.opacity === "0",
+      JSON.stringify(touchEnd)
     );
 
-    // 208px 的上滑位移已远超触摸消散阈值(60px),phase 不变才是守卫在挡
-    const phaseMobileAfter = await page.evaluate(() => window.__flow.phase);
-    check(
-      "擦除期间触摸未驱动粒子消散(守卫)",
-      phaseMobileAfter >= 0.999,
-      `phase=${phaseMobileBefore.toFixed(3)}→${phaseMobileAfter.toFixed(3)}, wipe 同期 0 → ${wipeMobileDrag.toFixed(3)}`
-    );
     await ctx.close();
   }
 
   await browser.close();
 
-  // 404 为发布前预期(新 tag 未推出时 CDN 资源回退本地的必经路径),不计为错误
+  // 404 为发布前预期（新 tag 未推出时 CDN 资源回退本地的必经路径），不计为错误
   const errs = logs.filter(
     (l) => (l.includes("[error]") || l.includes("pageerror")) && !l.includes("404")
   );
-  check("控制台零错误(404 除外)", errs.length === 0, errs.join(" | ").slice(0, 200));
+  check("控制台零错误（404 除外）", errs.length === 0, errs.join(" | ").slice(0, 200));
 
   const failed = results.filter((r) => !r.pass);
   console.log(`\n===== ${results.length - failed.length}/${results.length} 通过 =====`);

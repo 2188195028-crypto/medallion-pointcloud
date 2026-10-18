@@ -102,21 +102,48 @@ config.craftTags.forEach((tag) => {
   tagsEl.appendChild(li);
 });
 
-// ---------- 落地实景(店面墙绘:滚动擦除前后对比) ----------
-// 资源路径与粒子数据同规则:CDN 优先,失败回退本地相对路径。
-// (新 tag 发布前 CDN 上尚无 webp,无回退会 404 裂图——与照片取色二级回退同理)
-const realwallThumbsEl = document.getElementById("realwall-thumbs");
-const realwallOverlayEl = document.getElementById("realwall-overlay");
-const realwallBeforeEl = document.getElementById("realwall-before");
-const realwallAfterEl = document.getElementById("realwall-after");
-const realwallCaptionEl = document.getElementById("realwall-caption");
+// ---------- 落地实景（第二幕分栏 + 档案 + 同机位对比） ----------
+// 页面是正常文档流：首幕 100svh → 展墙纸面分栏 → 项目档案 → 同机位对比。
+// 资源路径与粒子数据同规则：CDN 优先，失败回退本地相对路径。
+// （新 tag 发布前 CDN 上尚无新图时，回退本地不裂图——与照片取色二级回退同理）
+const featureEl = document.getElementById("feature");
+const featureTitleEl = document.getElementById("feature-title");
+const featureFactsEl = document.getElementById("feature-facts");
+const featureImgEl = document.getElementById("feature-img");
+const cmpFrameEl = document.getElementById("cmp-frame");
+const cmpBeforeEl = document.getElementById("cmp-before");
+const cmpAfterEl = document.getElementById("cmp-after");
+const cmpHandleEl = document.getElementById("cmp-handle");
+const heroEl = document.getElementById("hero");
+const dossierEl = document.getElementById("dossier");
+const dossierTitleEl = document.getElementById("dossier-title");
 
 const REALWALL = config.realwall || {};
-const RW_BEFORE = REALWALL.before;
-const RW_AFTER = REALWALL.after;
-const RW_FEATHER = typeof REALWALL.feather === "number" ? REALWALL.feather : 0.06;
-const RW_WHEEL_STEP = typeof REALWALL.wheelStep === "number" ? REALWALL.wheelStep : 0.0018;
-const RW_TOUCH_DIST = typeof REALWALL.touchDistance === "number" ? REALWALL.touchDistance : 0.5;
+const RW_BEFORE = REALWALL.before || {};
+const RW_AFTER = REALWALL.after || {};
+const RW_FEATURE = REALWALL.feature || {};
+const RW_DOSSIER = REALWALL.dossier || {};
+const RW_COMPARE = REALWALL.comparison || {};
+const RW_ALIGN = REALWALL.align || {};
+const RW_SCALE = typeof RW_ALIGN.scale === "number" ? RW_ALIGN.scale : 1;
+const RW_OFFSET_Y = typeof RW_ALIGN.offsetYRatio === "number" ? RW_ALIGN.offsetYRatio : 0;
+const RW_FEATHER = typeof RW_COMPARE.feather === "number" ? RW_COMPARE.feather : 0.022;
+const RW_START = typeof RW_COMPARE.start === "number" ? RW_COMPARE.start : 0.5;
+
+// 只读验证钩子：测试读这些值，不需要解析 mask 字符串或过渡状态
+window.__page = {
+  featureRevealed: false,
+  dossierRevealed: false,
+  comparePos: RW_START,
+  heroInView: true,
+  heroExit: 0,
+  actDawn: 0,
+};
+
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value || "";
+}
 
 function realwallAssetUrl(path) {
   return config.cdnBase ? config.cdnBase + path : path;
@@ -137,167 +164,418 @@ function attachRealwallFallback(img, path) {
   setTimeout(tryLocal, 8000);
 }
 
-// 大图查看器是否打开(打开期间滚轮/触摸手势不再控制粒子消散)
-function realwallIsOpen() {
-  return !!realwallOverlayEl && !realwallOverlayEl.hidden;
-}
-
-// ---- 擦除进度 ----
-// realwallWipe:0 = 全「改造前」,1 = 全「落地后」。直接跟随输入,不做缓动
-// (缓动会让滚轮擦除有滞后感,这个效果的手感全靠"跟手")。
-let realwallWipe = 0;
-
-// 进度 → mask 端点位置。羽化带会把端点推出 0-100% 区间,而 CSS 渐变的首尾颜色
-// 会向两端自动延伸,所以 --wipe-edge 必须映射到 [-feather, 1+feather]:
-// p=0 时端点正好落在 0%(全透明 → after 完全不显);p=1 落在 100%(全黑 → 全显)。
-// 若直接把 p 当端点,0/1 两端会各留一条半透明带(渐变在端点处只插值到一半)。
-function realwallEdgePercent(p) {
-  return (p * (1 + 2 * RW_FEATHER) - RW_FEATHER) * 100;
-}
-
-function setRealwallWipe(p) {
-  realwallWipe = Math.max(0, Math.min(1, p));
-  if (!realwallOverlayEl) return;
-  realwallOverlayEl.style.setProperty(
-    "--wipe-edge",
-    realwallEdgePercent(realwallWipe).toFixed(3) + "%"
+// 图片懒加载:进入视口下方 200px 才发请求,避免和 1.98MB 粒子数据抢带宽。
+// 设置 src 之后才启动 8s CDN 兜底计时,否则"还没开始加载"会被误判为挂起。
+function loadImageNear(img, path, alt) {
+  if (!img || !path) return;
+  img.alt = alt || "";
+  let started = false;
+  const start = () => {
+    if (started) return;
+    started = true;
+    img.src = realwallAssetUrl(path);
+    attachRealwallFallback(img, path);
+  };
+  if (!("IntersectionObserver" in window)) {
+    start();
+    return;
+  }
+  const io = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        io.disconnect();
+        start();
+      }
+    },
+    { rootMargin: "200px 0px" }
   );
-  // 供验证脚本读取(shot-realwall/verify 断言擦除进度用),免得测试去解析 mask 字符串
-  realwallOverlayEl.dataset.wipe = realwallWipe.toFixed(4);
-  if (realwallCaptionEl) {
-    realwallCaptionEl.textContent =
-      realwallWipe < 0.5 ? RW_BEFORE.caption : RW_AFTER.caption;
+  io.observe(img);
+}
+
+// ---------- 第二幕：编辑式分栏文案注入 ----------
+function buildFeature() {
+  if (!featureEl || !RW_FEATURE) return;
+  setText("feature-kicker", RW_FEATURE.kicker);
+  setText("feature-lead", RW_FEATURE.lead);
+  setText("feature-cta-label", RW_FEATURE.cta || "查看前后对比");
+  setText("feature-caption", RW_FEATURE.caption);
+
+  // 标题逐行拆开：外层裁切、内层做 blur(8px)→0 与 32px 上移。
+  // 行数写入 --line-count，图片的入场延迟跟着行数走。
+  const lines = Array.isArray(RW_FEATURE.titleLines) ? RW_FEATURE.titleLines : [];
+  if (featureTitleEl) {
+    featureTitleEl.textContent = "";
+    lines.forEach((line, i) => {
+      const outer = document.createElement("span");
+      outer.className = "split-line";
+      outer.style.setProperty("--i", String(i));
+      const inner = document.createElement("span");
+      inner.textContent = line;
+      outer.appendChild(inner);
+      featureTitleEl.appendChild(outer);
+    });
   }
+  featureEl.style.setProperty("--line-count", String(Math.max(1, lines.length)));
+
+  if (featureFactsEl) {
+    (RW_FEATURE.facts || []).forEach((item) => {
+      const row = document.createElement("div");
+      const dt = document.createElement("dt");
+      const dd = document.createElement("dd");
+      dt.textContent = item.label;
+      dd.textContent = item.value;
+      row.appendChild(dt);
+      row.appendChild(dd);
+      featureFactsEl.appendChild(row);
+    });
+  }
+
+  loadImageNear(featureImgEl, RW_AFTER.path, RW_AFTER.caption);
+}
+
+// 标题/图片揭示：阈值 0.25、只触发一次（与参考效果一致）
+function setupFeatureReveal() {
+  if (!featureEl) return;
+  const reveal = () => {
+    if (window.__page.featureRevealed) return;
+    window.__page.featureRevealed = true;
+    featureEl.classList.add("is-revealed");
+    featureEl.dataset.revealed = "1";
+  };
+  if (!("IntersectionObserver" in window)) {
+    reveal();
+    return;
+  }
+  const io = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        reveal();
+        io.disconnect();
+      }
+    },
+    { threshold: 0.25 }
+  );
+  io.observe(featureEl);
+}
+
+// ---------- 第三幕：项目档案（前期规划 + 施工材料与工序） ----------
+function buildDossier() {
+  if (!dossierEl || !RW_DOSSIER.steps) return;
+  setText("dossier-kicker", RW_DOSSIER.kicker);
+  setText("dossier-lead", RW_DOSSIER.lead);
+  setText("dossier-plan-title", RW_DOSSIER.planTitle);
+  setText("dossier-ledger-title", RW_DOSSIER.ledgerTitle);
+  setText("dossier-note", RW_DOSSIER.note);
+  setText("dossier-cta-label", RW_DOSSIER.cta || "看前后对比");
+
+  // 标题逐行拆开，与第二幕同一套 blur(8px)→0 / 上移 32px 的揭示节奏
+  const lines = Array.isArray(RW_DOSSIER.titleLines) ? RW_DOSSIER.titleLines : [];
+  if (dossierTitleEl) {
+    dossierTitleEl.textContent = "";
+    lines.forEach((line, i) => {
+      const outer = document.createElement("span");
+      outer.className = "split-line";
+      outer.style.setProperty("--i", String(i));
+      const inner = document.createElement("span");
+      inner.textContent = line;
+      outer.appendChild(inner);
+      dossierTitleEl.appendChild(outer);
+    });
+  }
+
+  // 项目数字：只渲染 config 里已确认的条目，不做任何补推
+  const statsEl = document.getElementById("dossier-stats");
+  if (statsEl) {
+    (RW_DOSSIER.stats || []).forEach((stat) => {
+      const group = document.createElement("div");
+      const dt = document.createElement("dt");
+      const dd = document.createElement("dd");
+      dt.className = "dossier-stat-label";
+      dt.textContent = stat.label;
+      dd.className = "dossier-stat-value";
+      dd.textContent = stat.value;
+      if (stat.unit) {
+        const unit = document.createElement("span");
+        unit.className = "dossier-stat-unit";
+        unit.textContent = stat.unit;
+        dd.appendChild(unit);
+      }
+      group.appendChild(dt);
+      group.appendChild(dd);
+      statsEl.appendChild(group);
+    });
+  }
+
+  const stepsEl = document.getElementById("dossier-steps");
+  if (stepsEl) {
+    (RW_DOSSIER.steps || []).forEach((step) => {
+      const li = document.createElement("li");
+      const copy = document.createElement("div");
+      const title = document.createElement("h4");
+      const text = document.createElement("p");
+      title.className = "step-title";
+      text.className = "step-text";
+      title.textContent = step.title;
+      text.textContent = step.text;
+      copy.appendChild(title);
+      copy.appendChild(text);
+      li.appendChild(copy);
+      stepsEl.appendChild(li);
+    });
+  }
+
+  const materialsEl = document.getElementById("dossier-materials");
+  if (materialsEl) {
+    (RW_DOSSIER.materials || []).forEach((item) => {
+      const row = document.createElement("div");
+      const dt = document.createElement("dt");
+      const dd = document.createElement("dd");
+      dt.textContent = item.label;
+      dd.textContent = item.value;
+      row.appendChild(dt);
+      row.appendChild(dd);
+      materialsEl.appendChild(row);
+    });
+  }
+}
+
+// 档案揭示：进入视口 20% 触发一次；减少动态时 CSS 只保留透明度
+function setupDossierReveal() {
+  if (!dossierEl) return;
+  const reveal = () => {
+    if (window.__page.dossierRevealed) return;
+    window.__page.dossierRevealed = true;
+    dossierEl.classList.add("is-revealed");
+    dossierEl.dataset.revealed = "1";
+  };
+  if (!("IntersectionObserver" in window)) {
+    reveal();
+    return;
+  }
+  const io = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        reveal();
+        io.disconnect();
+      }
+    },
+    { threshold: 0.2 }
+  );
+  io.observe(dossierEl);
+}
+
+// ---------- 第四幕：同机位滑杆 ----------
+let comparePos = Math.min(1, Math.max(0, RW_START));
+let cmpDrag = null;
+// 最近一次输入方式：端点处只给鼠标/触摸淡出手柄（键盘聚焦时保留焦点环）
+let cmpInputMode = "pointer";
+
+function setComparePos(p) {
+  if (!cmpFrameEl || !cmpHandleEl) return;
+  comparePos = Math.min(1, Math.max(0, p));
+  const pct = (comparePos * 100).toFixed(2) + "%";
+  cmpFrameEl.style.setProperty("--cmp-pos", pct);
+  cmpFrameEl.dataset.pos = (comparePos * 100).toFixed(1);
+  // 分隔线左侧是 before、右侧是 after，比例按各自占画框的宽度算
+  const beforePct = Math.round(comparePos * 100);
+  const afterPct = 100 - beforePct;
+  cmpHandleEl.setAttribute("aria-valuenow", String(beforePct));
+  cmpHandleEl.setAttribute(
+    "aria-valuetext",
+    `改造前 ${beforePct}%，落地后 ${afterPct}%`
+  );
   // 被完全遮住的那张不该被读屏播报
-  if (realwallAfterEl) {
-    if (realwallWipe <= 0.001) realwallAfterEl.setAttribute("aria-hidden", "true");
-    else realwallAfterEl.removeAttribute("aria-hidden");
+  if (cmpBeforeEl) {
+    if (comparePos <= 0.001) cmpBeforeEl.setAttribute("aria-hidden", "true");
+    else cmpBeforeEl.removeAttribute("aria-hidden");
   }
+  if (cmpAfterEl) {
+    if (comparePos >= 0.999) cmpAfterEl.setAttribute("aria-hidden", "true");
+    else cmpAfterEl.removeAttribute("aria-hidden");
+  }
+  // 两端时手柄半只在画框外（会被裁成一道红边），交给 CSS 淡出；
+  // 键盘操作时不淡出，保留焦点环
+  if (comparePos <= 0.001) cmpFrameEl.dataset.edge = "start";
+  else if (comparePos >= 0.999) cmpFrameEl.dataset.edge = "end";
+  else delete cmpFrameEl.dataset.edge;
+  cmpFrameEl.dataset.input = cmpInputMode;
+  window.__page.comparePos = comparePos;
 }
 
-let realwallLastFocus = null;
-function openRealwall(startWipe) {
-  if (!realwallOverlayEl || !realwallOverlayEl.hidden) return;
-  realwallLastFocus = document.activeElement;
-  // 先定进度再显示,否则会闪一帧错误状态
-  setRealwallWipe(typeof startWipe === "number" ? startWipe : 0);
-  realwallOverlayEl.hidden = false;
-  requestAnimationFrame(() => realwallOverlayEl.classList.add("show"));
-  const closeBtn = document.getElementById("realwall-close");
-  if (closeBtn) closeBtn.focus();
-}
+function setupComparison() {
+  if (!featureEl || !cmpFrameEl || !cmpHandleEl) return;
 
-function closeRealwall() {
-  if (!realwallOverlayEl || realwallOverlayEl.hidden) return;
-  realwallOverlayEl.classList.remove("show");
-  realwallOverlayEl.hidden = true;
-  if (realwallLastFocus && typeof realwallLastFocus.focus === "function") {
-    realwallLastFocus.focus();
+  // 对齐补偿与羽化宽度从 config 注入 CSS（改补偿值改 config，不改 CSS）
+  cmpFrameEl.style.setProperty("--cmp-scale", (RW_SCALE * 100).toFixed(3) + "%");
+  cmpFrameEl.style.setProperty("--cmp-offset-y", (RW_OFFSET_Y * 100).toFixed(4) + "%");
+  cmpFrameEl.style.setProperty("--cmp-feather", (RW_FEATHER * 100).toFixed(3) + "%");
+
+  setText("compare-kicker", RW_COMPARE.kicker);
+  setText("compare-title", RW_COMPARE.title);
+  setText("compare-lead", RW_COMPARE.lead);
+  setText("compare-hint", RW_COMPARE.hint);
+  setText("cmp-caption", RW_COMPARE.caption);
+
+  const specEl = document.getElementById("compare-spec");
+  if (specEl) {
+    (RW_COMPARE.specs || []).forEach((item) => {
+      const row = document.createElement("div");
+      const dt = document.createElement("dt");
+      const dd = document.createElement("dd");
+      dt.textContent = item.label;
+      dd.textContent = item.value;
+      row.appendChild(dt);
+      row.appendChild(dd);
+      specEl.appendChild(row);
+    });
   }
-  realwallLastFocus = null;
-}
 
-if (realwallThumbsEl && realwallOverlayEl && RW_BEFORE && RW_AFTER) {
-  // 对齐补偿与羽化带宽从 config 注入 CSS(改补偿值改 config,不改 CSS——
-  // 与文字布局同规矩)。百分比写法让补偿随舞台自适应,不写死 px。
-  const rwAlign = REALWALL.align || {};
-  const rwScale = typeof rwAlign.scale === "number" ? rwAlign.scale : 1;
-  const rwOffsetY = typeof rwAlign.offsetYRatio === "number" ? rwAlign.offsetYRatio : 0;
-  realwallOverlayEl.style.setProperty("--rw-scale", (rwScale * 100).toFixed(3) + "%");
-  realwallOverlayEl.style.setProperty("--rw-offset-y", (rwOffsetY * 100).toFixed(4) + "%");
-  realwallOverlayEl.style.setProperty("--rw-feather", (RW_FEATHER * 100).toFixed(3) + "%");
+  loadImageNear(cmpBeforeEl, RW_BEFORE.path, RW_BEFORE.caption);
+  loadImageNear(cmpAfterEl, RW_AFTER.path, RW_AFTER.caption);
 
-  // 舞台两图:before 打底,after 叠在上层被 mask 揭示(结构在 index.html 静态写好)
-  if (realwallBeforeEl) {
-    realwallBeforeEl.src = realwallAssetUrl(RW_BEFORE.path);
-    attachRealwallFallback(realwallBeforeEl, RW_BEFORE.path);
-    realwallBeforeEl.alt = RW_BEFORE.caption;
-  }
-  if (realwallAfterEl) {
-    realwallAfterEl.src = realwallAssetUrl(RW_AFTER.path);
-    attachRealwallFallback(realwallAfterEl, RW_AFTER.path);
-    realwallAfterEl.alt = RW_AFTER.caption;
-  }
-  setRealwallWipe(0);
+  setComparePos(comparePos);
 
-  // 缩略图:点「改造前」从 wipe=0 进门(空墙),点「落地后」从 wipe=1 进门。
-  // 两个入口共用同一舞台,主页面布局零改动(v1.7 收容成果不动)
-  [
-    { item: RW_BEFORE, start: 0 },
-    { item: RW_AFTER, start: 1 },
-  ].forEach(({ item, start }) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "realwall-thumb";
-    btn.setAttribute("aria-label", "查看实景照片:" + item.caption);
-    const img = document.createElement("img");
-    img.src = realwallAssetUrl(item.path);
-    attachRealwallFallback(img, item.path);
-    img.alt = item.caption;
-    img.loading = "lazy";
-    btn.appendChild(img);
-    btn.addEventListener("click", () => openRealwall(start));
-    realwallThumbsEl.appendChild(btn);
+  // 输入方式跟踪：捕获阶段先于手柄自己的键盘处理，端点淡出只针对指针操作
+  window.addEventListener("keydown", () => { cmpInputMode = "key"; }, true);
+  window.addEventListener("pointerdown", () => { cmpInputMode = "pointer"; }, true);
+  cmpHandleEl.addEventListener("focus", () => {
+    cmpFrameEl.dataset.input = cmpInputMode;
   });
 
-  const realwallCloseBtn = document.getElementById("realwall-close");
-  if (realwallCloseBtn) {
-    realwallCloseBtn.addEventListener("click", closeRealwall);
-  }
+  const posFromEvent = (e) => {
+    const r = cmpFrameEl.getBoundingClientRect();
+    if (!r.width) return comparePos;
+    return (e.clientX - r.left) / r.width;
+  };
 
-  // 点背景关闭,点照片不关。擦除靠拖动,松手会落成一次 click——
-  // 位移超阈值就吞掉这次 click,否则拖完手指停在背景上会误关闭
-  // (与粒子"点击不误触"同一条纪律:轻触位移≈0 才算点击)
-  let rwDragMoved = 0;
-  realwallOverlayEl.addEventListener("click", (e) => {
-    if (rwDragMoved > 8) { rwDragMoved = 0; return; }
-    if (e.target === realwallOverlayEl) closeRealwall();
-  });
-
-  // ---- 驱动 1:滚轮(桌面主路径) ----
-  // 必须 passive:false 才能 preventDefault。全局粒子滚轮监听虽是 passive 的,
-  // 但它在 realwallIsOpen() 时已早退,两者不重叠、不抢
-  realwallOverlayEl.addEventListener("wheel", (e) => {
-    if (!realwallIsOpen()) return;
+  cmpFrameEl.addEventListener("pointerdown", (e) => {
+    if (cmpDrag) return;
+    if (e.isPrimary === false) return;
+    if (typeof e.button === "number" && e.button !== 0) return;
+    cmpDrag = { id: e.pointerId };
+    // 点画框任意位置都能把分隔线移过去，并顺手聚焦手柄
+    try { cmpHandleEl.focus({ preventScroll: true }); } catch (err) { /* 忽略 */ }
+    setComparePos(posFromEvent(e));
     e.preventDefault();
-    setRealwallWipe(realwallWipe + e.deltaY * RW_WHEEL_STEP);
-  }, { passive: false });
+  });
 
-  // ---- 驱动 2:触摸(手机) ----
-  // 照片是竖构图,用户会先竖着滑 → 把竖向位移映射到横向擦除。
-  // 用"起手进度 + 位移增量"的绝对映射(不是增量累加),来回滑不会漂移
-  let rwTouch = null;
-  realwallOverlayEl.addEventListener("touchstart", (e) => {
-    if (!realwallIsOpen()) return;
-    rwTouch = { startY: e.touches[0].clientY, startWipe: realwallWipe };
-    rwDragMoved = 0;
+  window.addEventListener("pointermove", (e) => {
+    if (!cmpDrag || e.pointerId !== cmpDrag.id) return;
+    setComparePos(posFromEvent(e));
   }, { passive: true });
-  realwallOverlayEl.addEventListener("touchmove", (e) => {
-    if (!realwallIsOpen() || !rwTouch) return;
-    e.preventDefault();
-    const dy = rwTouch.startY - e.touches[0].clientY; // 上滑为正 → 前进
-    rwDragMoved = Math.max(rwDragMoved, Math.abs(dy));
-    setRealwallWipe(rwTouch.startWipe + dy / (window.innerHeight * RW_TOUCH_DIST));
-  }, { passive: false });
-  realwallOverlayEl.addEventListener("touchend", () => { rwTouch = null; }, { passive: true });
 
-  // ---- 驱动 3:键盘(Esc 关闭 / ← → 擦除 / Tab 焦点圈定) ----
-  document.addEventListener("keydown", (e) => {
-    if (!realwallIsOpen()) return;
-    if (e.key === "Escape") closeRealwall();
-    else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-      e.preventDefault();
-      setRealwallWipe(realwallWipe + 0.08);
-    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-      e.preventDefault();
-      setRealwallWipe(realwallWipe - 0.08);
-    } else if (e.key === "Tab") {
-      // 焦点圈定:查看器内仅关闭按钮可聚焦
-      e.preventDefault();
-      if (realwallCloseBtn) realwallCloseBtn.focus();
-    }
+  const endDrag = (e) => {
+    if (cmpDrag && e.pointerId === cmpDrag.id) cmpDrag = null;
+  };
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", endDrag);
+  window.addEventListener("blur", () => { cmpDrag = null; });
+
+  // 键盘：← → 每次 2%，Home/End 到两端，PageUp/PageDown 每次 10%
+  cmpHandleEl.addEventListener("keydown", (e) => {
+    let next = null;
+    if (e.key === "ArrowLeft") next = comparePos - 0.02;
+    else if (e.key === "ArrowRight") next = comparePos + 0.02;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = 1;
+    else if (e.key === "PageDown") next = comparePos - 0.1;
+    else if (e.key === "PageUp") next = comparePos + 0.1;
+    if (next === null) return;
+    e.preventDefault();
+    setComparePos(next);
   });
 }
+
+// ---------- 首幕滚出：粒子在纸面覆盖前消散 ----------
+let heroInView = true;
+let heroDissolved = false;
+
+// 一幕→二幕晨曦：场景底色随滚动从墨夜升温到暖褐，与第二幕上缘的
+// 羽化带接力。终点不取纸色——结尾段画面已被第二幕铺满，而高亮底色
+// 会直接顶穿 Bloom 阈值（0.82），让整屏发光。
+const ACT_DAWN_STOPS = [
+  { at: 0, color: new THREE.Color("#141311") },
+  { at: 0.35, color: new THREE.Color("#241813") },
+  { at: 0.7, color: new THREE.Color("#3b241b") },
+  { at: 1, color: new THREE.Color("#5a3728") },
+];
+const actDawnColor = new THREE.Color();
+let sceneRef = null; // 场景创建后赋值；滚动回调可能早于初始化，需判空
+
+function updateActDawnColor(progress) {
+  if (!sceneRef) return;
+  const p = Math.min(1, Math.max(0, progress));
+  let i = 0;
+  while (i < ACT_DAWN_STOPS.length - 2 && p > ACT_DAWN_STOPS[i + 1].at) i++;
+  const a = ACT_DAWN_STOPS[i];
+  const b = ACT_DAWN_STOPS[i + 1];
+  const t = Math.min(1, Math.max(0, (p - a.at) / (b.at - a.at)));
+  actDawnColor.copy(a.color).lerp(b.color, t * t * (3 - 2 * t));
+  sceneRef.background.copy(actDawnColor);
+}
+
+function setupHeroScroll() {
+  if (heroEl && "IntersectionObserver" in window) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        // 首幕完全离开视口后停渲染；滚回来时恢复
+        heroInView = entries.some((e) => e.isIntersecting);
+        window.__page.heroInView = heroInView;
+      },
+      { threshold: 0 }
+    );
+    io.observe(heroEl);
+  }
+
+  let scheduled = false;
+  const update = () => {
+    scheduled = false;
+    const y = window.scrollY || window.pageYOffset || 0;
+    const vh = document.documentElement.clientHeight || window.innerHeight;
+
+    // 首幕文字退场进度：与粒子消散共用前 0.5vh，文字在纸面覆盖前先让位。
+    // 进度写进 CSS 变量，由各文字区块按不同位移/淡出速度接力完成。
+    const exit = Math.min(1, Math.max(0, y / (vh * 0.5)));
+    if (heroEl) heroEl.style.setProperty("--hero-exit", exit.toFixed(4));
+    window.__page.heroExit = exit;
+
+    // 幕间颜色过渡：0→0.9vh 内把场景底色从墨夜升温到暖褐；
+    // 第二幕的 .feature-dawn 羽化带在同一区间升上来，两段颜色接力。
+    const dawn = Math.min(1, Math.max(0, y / (vh * 0.9)));
+    updateActDawnColor(dawn);
+    window.__page.actDawn = dawn;
+
+    // 羽化带静止时高度必须为 0（否则首屏底部会提前露出纸色）；
+    // 前 0.16vh 里随滚动展开，形成"纸边先长出晨光"的过渡。
+    const bandGrow = Math.min(1, Math.max(0, y / (vh * 0.16)));
+    document.documentElement.style.setProperty("--dawn-band", bandGrow.toFixed(4));
+
+    // 双阈值滞回：纸面推到半屏时消散，退回 1/4 屏时重新聚起，
+    // 避免在阈值附近来回滚动导致粒子反复闪烁
+    if (!heroDissolved && y > vh * 0.5) {
+      heroDissolved = true;
+      setPhase(0, 1.1);
+    } else if (heroDissolved && y < vh * 0.25) {
+      heroDissolved = false;
+      setPhase(1, 0.55);
+    }
+  };
+  window.addEventListener("scroll", () => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(update);
+  }, { passive: true });
+  // 延迟到模块执行完再跑一次：恢复滚动位置时 setPhase 访问的 flow
+  // 在下方才初始化，同步调用会撞 TDZ
+  requestAnimationFrame(update);
+}
+
+buildFeature();
+setupFeatureReveal();
+buildDossier();
+setupDossierReveal();
+setupComparison();
+setupHeroScroll();
 
 // ---------- 场景 ----------
 let renderer;
@@ -315,15 +593,17 @@ try {
 const TOUCH_DEVICE = window.matchMedia("(pointer: coarse)").matches;
 const pixelRatio = Math.min(window.devicePixelRatio || 1, TOUCH_DEVICE ? 1.5 : 2);
 renderer.setPixelRatio(pixelRatio);
-renderer.setSize(window.innerWidth, window.innerHeight, false);
+const vp0 = viewportSize();
+renderer.setSize(vp0.w, vp0.h, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(config.theme.bg);
+sceneRef = scene; // 幕间晨曦的滚动回调从这里改背景色
 
 const camera = new THREE.PerspectiveCamera(
   STAGE.fov,
-  window.innerWidth / window.innerHeight,
+  vp0.w / vp0.h,
   0.1,
   100
 );
@@ -484,45 +764,9 @@ function updateFlow(dt) {
   }
 }
 
-// 单次手势触发:滚轮在 450ms 窗口内累计位移超过阈值 → 触发一次
-const GESTURE_THRESHOLD = 80;
-let gestureAccum = 0;
-let gestureTimer = null;
-
-function handleGesture(d) {
-  if (realwallIsOpen()) return; // 大图查看器打开时不控制粒子
-  gestureAccum += d;
-  if (Math.abs(gestureAccum) >= GESTURE_THRESHOLD) {
-    if (gestureAccum > 0) setPhase(0, 0.5); // 下滑/前翻 → 消散
-    else setPhase(1, 0.45); // 上滑/回翻 → 升起
-    gestureAccum = 0;
-  }
-  clearTimeout(gestureTimer);
-  gestureTimer = setTimeout(() => { gestureAccum = 0; }, 450);
-}
-
-window.addEventListener("wheel", (e) => handleGesture(e.deltaY), { passive: true });
-
-// 触摸:一次手势(开始→结束)的总位移判定,点击(位移≈0)不会误触发
-let touchStartY = null;
-let touchAccum = 0;
-window.addEventListener("touchstart", (e) => {
-  if (realwallIsOpen()) return; // 查看器内的滑动不触发消散/升起
-  touchStartY = e.touches[0].clientY;
-  touchAccum = 0;
-}, { passive: true });
-window.addEventListener("touchmove", (e) => {
-  if (touchStartY === null) return;
-  touchAccum = touchStartY - e.touches[0].clientY; // 只记录,不触发
-}, { passive: true });
-window.addEventListener("touchend", () => {
-  if (touchStartY === null) return;
-  if (Math.abs(touchAccum) >= 60) {
-    if (touchAccum > 0) setPhase(0, 0.5); // 手指上滑 → 消散
-    else setPhase(1, 0.45); // 手指下滑 → 升起
-  }
-  touchStartY = null;
-});
+// v3.0 起页面是正常文档流：滚轮/触摸不再被"翻章手势"截获，
+// 滚动只负责推进页面，粒子的消散由 setupHeroScroll() 按滚动位置触发。
+// 画布的 touch-action: pan-y 让竖向滑动照常滚动页面，横向拖动仍旋转模型。
 
 // ---------- 鼠标/触摸拖拽旋转(左右展示) ----------
 // 拖拽时暂停自动旋转,角度由用户控制;松手后保持该角度,
@@ -570,15 +814,15 @@ const endDragRot = (e) => {
 window.addEventListener("pointerup", endDragRot);
 window.addEventListener("pointercancel", endDragRot);
 
-// 页面切走/关闭 → 消散;回到页面 → 慢速重新升起(入场动画)
+// 页面切走 → 消散;回到页面时按滚动位置决定升起还是保持消散
+// (读者停在对比幕时，不该把首幕粒子重新升起)
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     setPhase(0, 0.5);
   } else {
-    setPhase(1, 0.45);
+    setPhase(heroDissolved ? 0 : 1, 0.55);
   }
 });
-window.addEventListener("beforeunload", () => setPhase(0, 0.5));
 
 function makeMaterial() {
   return new THREE.ShaderMaterial({
@@ -1233,9 +1477,8 @@ function buildPoints(data, stats) {
     texMeshes: stats.texMeshes ?? 0,
   };
   window.__showcaseReady = true; // 喂饱 index.html 的加载看门狗
-  // 验证钩子(只读):擦除对比开启期间滚轮/触摸不得驱动粒子消散,这条守卫要靠
-  // 读写 flow.phase 才能断言(与 #realwall-overlay 的 dataset.wipe 同一条理由:
-  // 测试不该去解析渲染状态)。不参与任何业务逻辑。
+  // 验证钩子(只读):首幕滚出后粒子应完成消散、滚回来应回升,测试读 flow.phase
+  // 断言,不解析渲染状态。不参与任何业务逻辑。
   window.__flow = flow;
   console.log("[showcase] 实际粒子数量 =", geometry.attributes.position.count);
 
@@ -1243,7 +1486,8 @@ function buildPoints(data, stats) {
   applyLayout();
   loadingEl.style.opacity = "0";
   setTimeout(() => { loadingEl.style.display = "none"; }, 600);
-  textElapsed = 0; // 开始文字淡入与打字
+  // 减少动态：跳过淡入与打字机，直接呈现完整静态文字
+  textElapsed = REDUCED ? 1000 : 0;
   reportDiagnostics();
   setTimeout(reportDiagnostics, 6000); // 6 秒后补充含帧率的完整诊断
   if (SHOT) setTimeout(fireShotOnce, 1500); // ?t= 冻结模式下渲染稳定后上报
@@ -1251,8 +1495,18 @@ function buildPoints(data, stats) {
 }
 
 // ---------- 布局与分辨率自适应 ----------
+function viewportSize() {
+  // 页面现在有滚动条：innerWidth 包含滚动条宽度，会让固定画布宽出 10px。
+  // 布局视口（clientWidth/Height）才是 position:fixed inset:0 的实际尺寸。
+  const doc = document.documentElement;
+  return {
+    w: doc.clientWidth || window.innerWidth,
+    h: doc.clientHeight || window.innerHeight,
+  };
+}
+
 function applyLayout() {
-  const w = window.innerWidth, h = window.innerHeight;
+  const { w, h } = viewportSize();
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -1312,18 +1566,22 @@ function updateText(dt) {
   textElapsed += dt;
   const e = textElapsed;
 
-  const fadeIn = (el, delay) => {
+  // 首幕滚动退场的进度同时乘进入场透明度：仍在淡入时下滚也不会把文字留在屏上。
+  const heroExit = Math.min(1, Math.max(0, window.__page.heroExit || 0));
+  const exitFactor = Math.max(0, 1 - heroExit * 1.45);
+  const fadeIn = (el, delay, withExit = false) => {
     if (!el) return;
     const p = smooth(0.25 + delay, 0.95 + delay, e); // 入场从下方 18px 回位
-    el.style.opacity = p.toFixed(3);
+    const o = Math.min(1, p * (withExit ? exitFactor : 1));
+    el.style.opacity = o.toFixed(3);
     el.style.transform = `translateY(${((1 - p) * 18).toFixed(2)}px)`;
   };
-  fadeIn(els.category, 0);
-  fadeIn(els.title, 0.08);
-  fadeIn(els.alias, 0.15);
-  fadeIn(els.intro, 0.24);
-  fadeIn(els.introSub, 0.32);
-  fadeIn(bodyWrap, 0.4);
+  fadeIn(els.category, 0, true);
+  fadeIn(els.title, 0.08, true);
+  fadeIn(els.alias, 0.15, true);
+  fadeIn(els.intro, 0.24, true);
+  fadeIn(els.introSub, 0.32, true);
+  fadeIn(bodyWrap, 0.4, true);
   // #palette/#tags 的 ul 初始 opacity 为 0,必须淡入 ul 本身
   fadeIn(paletteEl, 0.9);
   fadeIn(tagsEl, 0.95);
@@ -1351,6 +1609,15 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
 
+  // 首幕完全滚出视口后暂停渲染：纸面与对比幕都是不透明的，
+  // 画布看不到，没必要继续跑 bloom（省电、避免手机发热）。
+  // 但相位还在缓动时继续跑到落定——否则快速滚下去会把消散冻在半路，
+  // 滚回第一幕时先看到一团半消散的粒子，再等回升。
+  if (!heroInView && !flow.easing) {
+    requestAnimationFrame(frame);
+    return;
+  }
+
   updateFlow(dt);
 
   // 粒子相位由展示流程控制;模型自动旋转在下方按拖拽状态推进
@@ -1372,8 +1639,8 @@ function frame(now) {
     uniforms.uPhaseFade.value = 1;
   }
 
-  // 模型:自动旋转(拖拽时暂停)+ 极轻微浮动,固定在展示位
-  if (!dragRot.active) rotTotal += dt * STAGE.rotationSpeed;
+  // 模型:自动旋转(拖拽时暂停;减少动态时停转)+ 极轻微浮动
+  if (!dragRot.active && !REDUCED) rotTotal += dt * STAGE.rotationSpeed;
   group.rotation.y = rotTotal + dragRot.angle;
   const baseY = IS_PORTRAIT() ? STAGE.portraitCenterY : 0; // 竖屏模型下移
   group.position.y = baseY + Math.sin(phaseTotal * 0.6) * STAGE.floatAmp;
@@ -1404,7 +1671,7 @@ window.addEventListener("beforeunload", () => {
 // ---------- 运行诊断 ----------
 function reportDiagnostics() {
   if (!pointsMain) return;
-  const w = window.innerWidth, h = window.innerHeight;
+  const { w, h } = viewportSize();
   const g = pointsMain.geometry;
   const diagLayoutScale = IS_PORTRAIT()
     ? Math.max(0.45, Math.min(1.1, w / 700))
