@@ -103,7 +103,8 @@ config.craftTags.forEach((tag) => {
 });
 
 // ---------- 落地实景（第二幕分栏 + 档案 + 同机位对比） ----------
-// 页面是正常文档流：首幕 100svh → 展墙纸面分栏 → 项目档案 → 同机位对比。
+// 页面是正常文档流：首幕 100svh → 实景分栏 → 项目档案 → 同机位对比，
+// 四幕统一沿用首幕墨夜纯色底。
 // 资源路径与粒子数据同规则：CDN 优先，失败回退本地相对路径。
 // （新 tag 发布前 CDN 上尚无新图时，回退本地不裂图——与照片取色二级回退同理）
 const featureEl = document.getElementById("feature");
@@ -137,7 +138,6 @@ window.__page = {
   comparePos: RW_START,
   heroInView: true,
   heroExit: 0,
-  actDawn: 0,
 };
 
 function setText(id, value) {
@@ -486,33 +486,9 @@ function setupComparison() {
   });
 }
 
-// ---------- 首幕滚出：粒子在纸面覆盖前消散 ----------
+// ---------- 首幕滚出：粒子在章节覆盖前消散 ----------
 let heroInView = true;
 let heroDissolved = false;
-
-// 一幕→二幕晨曦：场景底色随滚动从墨夜升温到暖褐，与第二幕上缘的
-// 羽化带接力。终点不取纸色——结尾段画面已被第二幕铺满，而高亮底色
-// 会直接顶穿 Bloom 阈值（0.82），让整屏发光。
-const ACT_DAWN_STOPS = [
-  { at: 0, color: new THREE.Color("#141311") },
-  { at: 0.35, color: new THREE.Color("#241813") },
-  { at: 0.7, color: new THREE.Color("#3b241b") },
-  { at: 1, color: new THREE.Color("#5a3728") },
-];
-const actDawnColor = new THREE.Color();
-let sceneRef = null; // 场景创建后赋值；滚动回调可能早于初始化，需判空
-
-function updateActDawnColor(progress) {
-  if (!sceneRef) return;
-  const p = Math.min(1, Math.max(0, progress));
-  let i = 0;
-  while (i < ACT_DAWN_STOPS.length - 2 && p > ACT_DAWN_STOPS[i + 1].at) i++;
-  const a = ACT_DAWN_STOPS[i];
-  const b = ACT_DAWN_STOPS[i + 1];
-  const t = Math.min(1, Math.max(0, (p - a.at) / (b.at - a.at)));
-  actDawnColor.copy(a.color).lerp(b.color, t * t * (3 - 2 * t));
-  sceneRef.background.copy(actDawnColor);
-}
 
 function setupHeroScroll() {
   if (heroEl && "IntersectionObserver" in window) {
@@ -533,24 +509,13 @@ function setupHeroScroll() {
     const y = window.scrollY || window.pageYOffset || 0;
     const vh = document.documentElement.clientHeight || window.innerHeight;
 
-    // 首幕文字退场进度：与粒子消散共用前 0.5vh，文字在纸面覆盖前先让位。
+    // 首幕文字退场进度：与粒子消散共用前 0.5vh，文字在章节覆盖前先让位。
     // 进度写进 CSS 变量，由各文字区块按不同位移/淡出速度接力完成。
     const exit = Math.min(1, Math.max(0, y / (vh * 0.5)));
     if (heroEl) heroEl.style.setProperty("--hero-exit", exit.toFixed(4));
     window.__page.heroExit = exit;
 
-    // 幕间颜色过渡：0→0.9vh 内把场景底色从墨夜升温到暖褐；
-    // 第二幕的 .feature-dawn 羽化带在同一区间升上来，两段颜色接力。
-    const dawn = Math.min(1, Math.max(0, y / (vh * 0.9)));
-    updateActDawnColor(dawn);
-    window.__page.actDawn = dawn;
-
-    // 羽化带静止时高度必须为 0（否则首屏底部会提前露出纸色）；
-    // 前 0.16vh 里随滚动展开，形成"纸边先长出晨光"的过渡。
-    const bandGrow = Math.min(1, Math.max(0, y / (vh * 0.16)));
-    document.documentElement.style.setProperty("--dawn-band", bandGrow.toFixed(4));
-
-    // 双阈值滞回：纸面推到半屏时消散，退回 1/4 屏时重新聚起，
+    // 双阈值滞回：章节推到半屏时消散，退回 1/4 屏时重新聚起，
     // 避免在阈值附近来回滚动导致粒子反复闪烁
     if (!heroDissolved && y > vh * 0.5) {
       heroDissolved = true;
@@ -598,8 +563,9 @@ renderer.setSize(vp0.w, vp0.h, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
+// 四幕统一沿用首幕墨夜纯色底（用户要求：后三幕不再有各自的背景，
+// 只保留纯色、不叠加条纹），因此场景底色全程不变。
 scene.background = new THREE.Color(config.theme.bg);
-sceneRef = scene; // 幕间晨曦的滚动回调从这里改背景色
 
 const camera = new THREE.PerspectiveCamera(
   STAGE.fov,
@@ -1609,7 +1575,7 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
 
-  // 首幕完全滚出视口后暂停渲染：纸面与对比幕都是不透明的，
+  // 首幕完全滚出视口后暂停渲染：后续章节都是不透明的，
   // 画布看不到，没必要继续跑 bloom（省电、避免手机发热）。
   // 但相位还在缓动时继续跑到落定——否则快速滚下去会把消散冻在半路，
   // 滚回第一幕时先看到一团半消散的粒子，再等回升。

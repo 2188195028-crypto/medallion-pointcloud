@@ -12,25 +12,23 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v2.1/assets/three/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v2.1/assets/three/"
+      "three": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v2.2/assets/three/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v2.2/assets/three/"
     }
   }
   </script>
 </head>
 <body>
   <main id="app">
-    <!-- 3D 点云画布：固定铺满视口，纸面章节滚上来时把它盖住 -->
+    <!-- 3D 点云画布：固定铺满视口，下方章节滚上来时把它盖住 -->
     <div id="stage" aria-hidden="true"><canvas id="scene"></canvas></div>
 
     <!-- ============================================================
          第一幕 · 点云展陈（100svh，正常文档流）
-         文字面板固定，画布固定；向下滚动时纸面章节从下方覆盖第一幕，
+         文字面板固定，画布固定；向下滚动时后续章节从下方覆盖第一幕，
          同时粒子在覆盖前消散——点云交还给实景。
          ============================================================ -->
     <section id="hero" aria-label="点云展陈">
-      <div class="hero-vignette" aria-hidden="true"></div>
-
       <!-- 左侧博物馆图录式器物介绍 -->
       <section id="text-panel" aria-label="器物介绍">
         <p id="category"></p>
@@ -69,13 +67,11 @@
     </section>
 
     <!-- ============================================================
-         第二幕 · 编辑式分栏揭示（展墙纸面色）
+         第二幕 · 编辑式分栏揭示（沿用首幕墨夜纯色底）
          左文右图；标题逐行 blur(8px)→0、上移 32px→0，图片 1.08→1 推近落定。
          触发阈值 0.25、只触发一次；减少动态时只保留透明度。
          ============================================================ -->
     <section id="feature" class="feature" aria-labelledby="feature-title">
-      <!-- 幕间颜色过渡：贴在纸面上缘的日出羽化带，随第二幕升起 -->
-      <div class="feature-dawn" aria-hidden="true"></div>
       <div class="feature-inner">
         <div class="feature-copy">
           <p class="feature-kicker"><span id="feature-kicker"></span></p>
@@ -99,7 +95,7 @@
     </section>
 
     <!-- ============================================================
-         第三幕 · 项目档案（灰阶底）
+         第三幕 · 项目档案（墨夜纯色底）
          前期规划五步 + 施工材料与工序。
          数字只放用户确认的三项：圆盘直径 2m、现场 7 天、现场 4 人；
          面积、材料用量等未核实，不写。
@@ -135,7 +131,7 @@
     </section>
 
     <!-- ============================================================
-         第四幕 · 同机位前后对比（近白底）
+         第四幕 · 同机位前后对比（墨夜纯色底）
          两图按实测补偿叠合：after 放大 1.015 / 下移 8px(相对 1148 高)。
          分隔线左侧 before、右侧 after，接缝带 2.2% 羽化，盖掉残余错位。
          ============================================================ -->
@@ -213,7 +209,7 @@
        ?local=1(调试参数):跳过 CDN 直接用工作区文件——改动尚未发版时,
        用本地服务器预览新代码(需 http,file:// 的相对模块导入会被 CORS 拦) -->
   <script type="module">
-    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v2.1/";
+    const cdn = "https://cdn.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v2.2/";
     const useLocal = location.search.indexOf("local=1") !== -1;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let ok = false;

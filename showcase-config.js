@@ -196,7 +196,7 @@ export default {
   // gcore 镜像不参与该重定向:实测 200 + ACAO:* + crossOrigin 取色可用(1.5s)。
   // three 模块仍走 cdn.jsdelivr.net(URL 写在 index.html importmap 里),那是 .js,
   // 不受图片重定向影响,**不要为了"统一主机"把它们一起改过来或把这里改回去**。
-  cdnBase: "https://gcore.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v2.1/",
+  cdnBase: "https://gcore.jsdelivr.net/gh/2188195028-crypto/medallion-pointcloud@v2.2/",
   // 参考照片(粒子取色源):模型贴图与照片四季布局不一致(照片左侧为黛蓝雪山、
   // 右上为朱红秋山,模型贴图缺失这些色域),按粒子盘面位置采样照片像素,
   // 保证渲染颜色布局与照片一致。照片 232KB,需随仓库入库(GitHub Pages)。
@@ -210,7 +210,8 @@ export default {
   modelRotation: [0, -Math.PI / 2, 0],
 
   // ---- 主题 ----
-  // 墨夜宣纸：首幕墨夜、实景宣纸、档案暖灰纸、对比米白；
+  // 墨夜纯色（2026-10-19）：四幕统一沿用首幕 #141311，
+  // 不再有各自的纸面背景，也不叠加条纹/纹理。
   // 朱砂只做指引（小标题短线、CTA、滑杆），石绿与金作辅色。
   // 完整令牌在 showcase.css 顶部。
   // bg 同时写入 WebGL 场景背景，必须与 CSS --bg 一致，否则滚到章节边缘会露色差。

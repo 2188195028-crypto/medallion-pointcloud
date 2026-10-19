@@ -269,3 +269,36 @@
 - **Pages**：推送后首次检查即已返回 `@v2.1`。线上桌面 1600×900 第二次加载 **19.2s**（首次 21.1s）、手机 390×844 **13.0s**、file:// 双击 **16.2s**；均低于 45s 看门狗。
 - **线上 + file:// 验证**：四幕均可用；档案 5 步 / 6 行 / 3 项数字（2m、7天、4人）；对比图 912 / 1000px 加载、滑杆 50%；无横向溢出；**0 个 4xx/5xx、0 pageerror**。截图见 `.tmp_live_shots/`（临时目录，未入库）。
 - 作品集的点云卡片已同步改成四幕文案（2026-10-18，作品集 `index.html` 未提交，其他铁塔/简历改动未动）；线上 medallion 已是 v2.1，卡片描述与链接一致。
+
+## 10. v2.2 轮（四幕统一墨夜纯色底，2026-10-19）
+
+**本轮性质**：用户浏览线上页面后提出——第一幕之后的第二、三、四幕不要各自的背景，
+统一沿用第一幕背景；并且只要纯色，不要条纹。因此这不是修 bug，而是背景系统收口：
+移除纸面三幕的底色与所有背景纹理，文字统一反转为浅色。
+
+### 改动
+- `showcase.css`：`.feature/.dossier/.compare` 背景统一为 `var(--bg)`（#141311），
+  删除 `.dossier` 顶部线性渐变与 `.compare` 金色径向渐变；`.hero-vignette`
+  顶光/暗角/纸纤维条纹层整体删除（桌面 + 竖屏两处），`.feature-dawn` 羽化带
+  与 `dawn-breathe` 一并删除；`.feature/.dossier/.compare` 加入与首幕相同的
+  深底文字令牌块（墨 #f4efe6 / 次级 #cfc7ba / 弱化 #a8a093 / 朱砂小字 #d98c73）；
+  对比幕画框、规格线、页脚分隔线改用 `--ink-line`，`.cmp-tag` 文字固定墨色。
+- `index.html`：移除 `.hero-vignette` 与 `.feature-dawn` 元素；注释同步为墨夜纯色。
+- `showcase.js`：删除 `ACT_DAWN_STOPS` / `updateActDawnColor()` / `sceneRef` /
+  `--dawn-band` 写入 / `window.__page.actDawn`，`scene.background` 全程保持
+  `config.theme.bg`；注释同步。
+- `showcase-config.js`：theme 注释同步为四幕同底色。
+
+### 验证（2026-10-19，`RW_LOCAL=1` 本地模式）
+| 项 | 结果 |
+|---|---|
+| `node --check` | showcase.js / showcase-config.js / tools/verify.js / tools/shot-realwall.js 全过 |
+| shot-realwall.js | **56/56**：桌面全链路（文字退场→粒子消散→分栏→档案→CTA→滑杆→回顶）+ 手机（触摸上滑/档案单栏/触摸滑杆）全绿 |
+| verify.js | 阻断断言全部通过（五视口；0 pageerror / 0 console.error / 0 netLocal） |
+| 计算样式 | 四幕 `background-color: rgb(20,19,17)`、`background-image: none`；分栏/档案/对比正文为 `rgb(207,199,186)` |
+| 视觉 | 1440×900 与 390×844 四幕截图复核：无纸色残留、无条纹、文字对比清晰、照片画框与标签可读 |
+
+### 发布
+- 按仓库流程 bump `index.html` 的 importmap / 引导脚本与 `showcase-config.js` 的
+  `cdnBase` 到 **@v2.2**，commit → tag v2.2 → push tag → push master → 预热
+  两主机 → 线上 + file:// 验证。
